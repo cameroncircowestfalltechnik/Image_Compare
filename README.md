@@ -27,6 +27,13 @@ This program is designed to transmit the the log files and output images to the 
 
 ### file_recieve_reply.py
 This program is hosted on the server and checks for the reception of the client receipt. Upon its arrival it checks the receipt for the incoming image folder size as well as client IP. From there it waits for the image folder it is recieveing to be the same size as designated by the receipt. Once the whole folder is transfered, this script sends the server receipt. From here the script saves a copy of the images to the processing folder to be interpretted later and another copy to the archive. Finally, it clears the reception folder. This program is intended to be run on startup of the server and will eventually be configured to loop forever.  
+### predeployment_copy.py
+I was recently asked to deploy my system on a machine that was malfunctioning. As the entire system is obviously not completely fully function I agreed to create a variant of the current setup to rush into deployment. This program is a copy of Main_Emulated with the follwoing changes.  
+  -Changed I/O to feature digitial input/output for alarm signals and mold status.  
+  -Changed workflow of image capture to be inline with actual use case. Ie. a single control image is maintained as opposed to taking a new one every time.  
+  -Designed to maintain images and adapt processing for two image states.  
+  -Added Gui elements to rest and view the control images.  
+  -File transmission to the server was removed.  
 
 # Files 
 ### config.txt
