@@ -69,7 +69,7 @@ sens = float(lines[8].strip()) #read line 8 as the image detection sensitivity
 
 #write to startup log
 startup_log = open(startup_log_path, "a") #open startup log csv file in "append mode"
-startup_log.write(time.asctime()+","+str(iso)+","+str(ss)+","+cm+","+str(res[0])+","+str(res[1])+","+str(rot)+","+str(thresh)+","+str(sens)+"\n") #write the current time and settings to the startup log
+startup_log.write(time.asctime()+current_password+","+","+str(iso)+","+str(ss)+","+cm+","+str(res[0])+","+str(res[1])+","+str(rot)+","+str(thresh)+","+str(sens)+"\n") #write the current time and settings to the startup log
 startup_log.close() #close the startup log (auto saves new data)
 
 #The Camera Zone------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
