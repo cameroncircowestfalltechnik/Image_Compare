@@ -1,7 +1,7 @@
 # #!/usr/bin/python #uncomment to designate the program as executable
 from PIL import ImageTk
 import PIL
-from guizero import App,Text,TextBox,PushButton,Picture,question,Window,Combo,info#,Image
+from guizero import App,Text,TextBox,PushButton,Picture,question,Window,Combo,info,Box#,Image
 import time
 import tkinter as tk
 from gpiozero import Button
@@ -15,12 +15,18 @@ from PIL import ImageChops
 from PIL import ImageEnhance
 import matplotlib.pyplot as plt
 import subprocess
+from gpiozero import DigitalInputDevice, DigitalOutputDevice
+import shutil
 
 
 #setup-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 setup_start = time.time() #start startup timer
 #I/O Setup
-button = Button(4)
+mold_open = DigitalInputDevice(4) #assign input pin (GPIO4 or Pin 7) to mold open signal
+ejector_fire = DigitalInputDevice(17) #assign input pin (GPIO17 or Pin 11) to ejector fire signal
+alarm_pin = DigitalOutputDevice(27) #assign output pin (GPIO27 or pin12) to alarm signal
+alarm_reset_pin = DigitalOutputDevice(23) #assign output pin (GPIO23 or pin 16) to alarm reset signal
+alarm_button = DigitalInputDevice(22) #assign input pin (GPIO22 or pin 15) to alarm reset button
 
 #file path setup
 config_path = "/home/pi/Desktop/Object_Detection/compare/config.txt" #define config file path
@@ -28,7 +34,6 @@ comp_path = "/home/pi/Desktop/Object_Detection/compare/compare_" #specify image 
 log_path = "/home/pi/Desktop/Object_Detection/results/log.csv" #specify log location
 startup_log_path = "/home/pi/Desktop/Object_Detection/results/startup_log.csv" #specify startup log location
 image_path = "/home/pi/Desktop/Object_Detection/results/images/" #specify output image path
-comp_dir = "/home/pi/Desktop/Object_Detection/compare/compare_" #specify image file location
 
 #kill the startup program
 try: #attempt the following
@@ -68,20 +73,39 @@ startup_log.write(time.asctime()+","+str(iso)+","+str(ss)+","+cm+","+str(res[0])
 startup_log.close() #close the startup log (auto saves new data)
 
 #The Camera Zone------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-def work():
-    global cap_start #set start time as global so the total decision time can be calculated
-    process_start = time.time() #start image processing timer
-    base = Image.open(comp_dir+'1'+filetype) #load control image
-    comp = Image.open(comp_dir+'2'+filetype) #load comparison image
+#capture and prcess the image
+def capture(name):
+    global cap_start
+    cap_start = time.time() #start image capture timer
     
-    #base = Image.open("/home/pi/Desktop/Object_Detection/compare2/Base.jpg") #override images
-    #comp = Image.open("/home/pi/Desktop/Object_Detection/compare2/REF.jpg")
-
+    #take picture
+    stream = BytesIO() #start writing camera stream to memory
+    camera.capture(stream, format='jpeg', use_video_port=True) #capture to the stream
+    stream.seek(0) #move to the first image captured
+    
+    #save the picture
+    img = Image.open(stream) #open the image
+    img = img.save(comp_path+name+filetype) #save the image
+    
+    cap_end = time.time() #stop the image capture time
+    cap_time = cap_end - cap_start #calculate elapsed time
+    print('Capture "'+name+'" took: {} seconds'.format(cap_time)) #display it.
+    process_start = time.time() #start image processing timer
+    
+    #open the comparison image and control
+    try:
+        base = Image.open(comp_path+name+"_ctrl"+filetype) #load control image
+    except:
+        set_control(name) #set the current base image as the control
+        base = Image.open(comp_path+name+"_ctrl"+filetype) #load control image
+    comp = Image.open(comp_path+name+filetype) #load comparison image
+    
+    #find the difference
     diff = ImageChops.difference(base, comp) #find difference between images and name it diff
     diff = ImageOps.grayscale(diff) #convert the difference to black and white
     diff = diff.point( lambda p: 255 if p > 255/sens else 0) #turn any point above defined sensitivity white "255" and anything below black "0". Effectively turns grayscale to black and white.
     
+    #analyze the difference and do something with the results
     tot = np.sum(np.array(diff)/255) #convert diff to an array and find the elementwise sum, call it tot for "total". This represents the quantity of pixels that are different
     print('Score: '+str(tot)) #print the "total"
     if tot > thresh: #if the total number of diffent pixels are more than the defined threshold do the following:
@@ -95,26 +119,28 @@ def work():
 
     process_end = time.time() #stop the timer
     process_time = process_end - process_start #calculate elapsed time since processing start
-    print('Process time: {} seconds'.format(process_time)) #display the image processing time
+    #print('Process time: {} seconds'.format(process_time)) #display the image processing time
     decision_time = process_end - cap_start #calculate elapsed time  since decision start
     print('Decision time: {} seconds'.format(decision_time)) #display the decision making time
-    
     disp_start = time.time() #start display time timer
     
+    #rotate images if needed
     base = base.rotate(rot) #rotate the control image if needed
     comp = comp.rotate(rot) #rotate the comparison image if needed
     diff = diff.rotate(rot) #rotate the difference image if needed
 
+    #generate the output image
     black = (0,0,0) #define black pixel rgb value
     color = (0,255,0) #define colored pixel rgb value (in this case it's currently green)
     diff = ImageOps.colorize(diff, black, color, blackpoint=0, whitepoint=255, midpoint=127) #convert black and white differenc image to black and color for more contrast when displaying
     #result = ImageChops.hard_light(base,diff)
-    comp2 = comp #duplicate the comparison image to comp2
-    enhancer = ImageEnhance.Brightness(comp2) #specify that we want to adjust the brightness of comp2
-    comp2 = enhancer.enhance(0.75) #decrease the brightness of comp2 by 25% for more contrast when displaying
-
-    result = ImageChops.add(diff,comp2) #overlay difference ontop of comp2 and call it result
+    #comp2 = comp #duplicate the comparison image to comp2
+    enhancer = ImageEnhance.Brightness(comp) #specify that we want to adjust the brightness of comp2
+    comp = enhancer.enhance(0.75) #decrease the brightness of comp2 by 25% for more contrast when displaying
+    result = ImageChops.add(diff,comp) #overlay difference ontop of comp2 and call it result
     pic.image = result #send results to the picture widget on the main page
+    
+    #save the output image and write to the log
     tim = time.asctime() #grab current time as to match log name and file name
     if check_size(image_path):
         result.save(image_path+tim+".jpg") #save results as a jpg with the current date and time
@@ -126,42 +152,20 @@ def work():
     
     disp_end = time.time() #stop the timer
     disp_time = disp_end - disp_start #calculate elapsed time since display start
-    print('Display time: {} seconds'.format(disp_time)) #display the display time
-
-
-
-def capture():
-    global n
-    #camera.exposure_mode = cm
-    #camera.shutter_speed = ss
-    #camera.iso = iso
-    #camera.resolution = res #specify resolution
-    #button.wait_for_press() #wait for button to be bumped
-    button.wait_for_release()
-    global cap_start
-    cap_start = time.time() #start image capture timer
-    
-    n = n+1 #iterate image counter
-    stream = BytesIO() #start writing camera stream to memory
-    camera.capture(stream, format='jpeg', use_video_port=True) #capture to the stream
-    stream.seek(0) #move to the first image captured
-    
-    img = Image.open(stream) #open the image
-    img = img.save(comp_dir+str(n)+filetype) #save the image
-    
-    cap_end = time.time() #stop the image capture time
-    cap_time = cap_end - cap_start #calculate elapsed time
-    print('Capture '+str(n)+' took: {} seconds'.format(cap_time)) #display it.
-    
-    if n == 2: #if the image counter is two do the following:
-        n=0 #reset the image counter
-        work() #process the images
+    #print('Display time: {} seconds'.format(disp_time)) #display the display time
 
 
 #Button Functions-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 def reset_alarm(): #define code to reset the alarm
     print("Alarm Reset") #placeholder: print text
     app.bg = "light grey"
+    alarm_reset_pin.blink(on_time=0.1,n=1) #make the alarm line "blink" for 0.1s once
+    
+def simulate_alarm(): #define the code to simulate the alarm
+    app.bg = 'tomato' #set app color to red
+    print("simulate alarm")
+    alarm_pin.blink(on_time=0.1,n=1) #make the alarm line "blink" for 0.1s once
+    
     
 def request_settings(): #define code to request the openeing of the settings page
     password = app.question(title="password", question="Enter Password:", initial_value=None) #launch popup window requesting password
@@ -350,19 +354,29 @@ def check_size(dest): #create function to check if folder size is greater than m
         return True
     else:
         return False
-
+    
 def config_write(line,text): #create function to write over a line in config file (arguments:line number to write to, text/number to write)
     lines[line] = str(text)+"\n" #save new text to sepcified entry in "lines" array
     with open(config_path,'w') as f: #open the config file in write mode
         f.writelines(lines) #write the lines array to it
     
-def simulate_alarm():
-    alarm_status = True
-    app.bg = 'tomato' #set app color to red
-    print("simulate alarm")
-
 def check_button():
-    if button.is_pressed: capture() #if button is pressed run "capture"
+    #if button.is_pressed: capture() #if button is pressed run "capture"
+    t = time.localtime() #grab the current time
+    current_time = (str(t[3])+":"+str(t[4])+":"+str(t[5])) #format it as a (hour:minute:second)
+    
+    if mold_open.value == 1: #if the mold open signal line is on
+        print("") #add an empty line
+        print(current_time +": mold open, checking if full") #report button status
+        capture("full") #run processing for full mold
+    elif ejector_fire.value == 1: #if the mold open signal line is on
+        print("") #add an empty line
+        print(current_time +": ejector fire, checking if empty") #report button status
+        capture("empty") #run processing for empty mold
+    elif reset_button.value == 1:
+        print("") #add an empty line
+        print(current_time +": Resetting alarm") #report button status
+        reset_alarm() #reset the alarm
     
 def restart():
     camera.close() #shutoff the camera
@@ -370,10 +384,24 @@ def restart():
     os.system("\n sudo python Main_Emulated_Startup.py") #run the prgram startup script
     
 def transmit():
-    subprocess.Popen(["python", "Main_Emulated_Transmit.py"]) #run the transmit script
+    #DISABLED
+    #subprocess.Popen(["python", "Main_Emulated_Transmit.py"]) #run the transmit script
+    pass
+
+def set_control(name):
+    print("resetting "+name)
+    try: #attempt to do the following
+        os.remove(comp_path+name+"_ctrl"+filetype) #delete the current control
+    except: #upon failure do the following
+        pass #do nothing
+    shutil.copyfile(comp_path+name+filetype,comp_path+name+"_ctrl"+filetype) #copy the current comparison image as the control
+    if name == "full": #if name is "full"
+        full_pic.image = comp_path+name+"_ctrl"+filetype #update the preview image
+    elif name == "empty": #if name is "empty"
+        empty_pic.image = comp_path+name+"_ctrl"+filetype #update the preview image
+    
 
 #Main Window----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-#convert_img("ref") #convert image to png
 with picamera.PiCamera() as camera: #start up the camera
     camera.exposure_mode = cm #set camera mode
     camera.shutter_speed = ss #set shutter speed
@@ -382,15 +410,33 @@ with picamera.PiCamera() as camera: #start up the camera
     stream = picamera.PiCameraCircularIO(camera, seconds=1) #generate a camera stream in which the camera retains 1 second of footage
     camera.start_recording(stream, format='h264') #start recording to the stream
     camera.wait_recording(0.25) #allow the camera to run a second to allow it to autofocus
-    #setup main window
-    app = App(title='main', layout='auto', width = 900, height = 575+50) #create the main application window
+    
+    app = App(title='main', layout='auto', width = 900, height = 575+50+50) #create the main application window
+    #control preview------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    full_preview = Window(app, title="full preview", width=800, height=550) #create a "full" preview window
+    full_pic = Picture(full_preview, image=comp_path+"full_ctrl"+filetype) #add the current full control as an image
+    full_pic_close = PushButton(full_preview, command=full_preview.hide, text="close") #add close button
+    empty_preview = Window(app, title="empty preview", width=800, height=550) #create an "empty" preview window
+    empty_pic = Picture(empty_preview, image=comp_path+"empty_ctrl"+filetype) #add the curent empty control as an image
+    empty_pic_close = PushButton(empty_preview, command=empty_preview.hide, text="close") #add close button
+    full_preview.hide() #conceal the full preview
+    empty_preview.hide() #conceal the empty preview
+    
+    #setup main window-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     pic = Picture(app, image="/home/pi/Desktop/Object_Detection/compare/ref.jpg", align='top') #create picture widget
-    reset_button = PushButton(app, command=reset_alarm, text="Reset", align='bottom') #define reset button widget
+    row1 = Box(app, width=180, height=50, align='bottom') #create a container for the reset and alarm buttons. call it row1
+    reset_button = PushButton(row1, command=reset_alarm, text="Reset", align='left') #define reset button widget
+    sim_button = PushButton(row1, command=simulate_alarm, text="Simulate Alarm", align='right') #define settings button widget
+    row2 = Box(app, width=300, height=50, align='bottom') #create a container for the control set buttons, call it row2
+    ctrl_set_full = PushButton(row2, command=lambda: set_control("full"), text="Reset Full Control", align='left')
+    ctrl_set_empty = PushButton(row2, command=lambda: set_control("empty"), text="Reset Empty Control", align='right')
+    row3 = Box(app, width=350, height=50, align='bottom') #create a container for the control preview buttons, call it row3
+    empty_see = PushButton(row3, command=empty_preview.show, text="Preview Empty Control", align='right')
+    full_see = PushButton(row3, command=full_preview.show, text="Preview Full Control", align='left')
     settings_button = PushButton(app, command=request_settings, text="Settings", align='bottom') #define settings button widget
-    sim_button = PushButton(app, command=simulate_alarm, text="Simulate Alarm", align='bottom') #define settings button widget
     pic.repeat(1, check_button) #attach repeat widget to the picture widget to run "check_button" every 1ms
     #reset_button.repeat(500, check_alarm)
-
+    
     #Password Reset Window Setup------------------------------------------------------------------------------------------------------------------------------------------------------------
     pass_reset_win = Window(app, title="Password Reset",layout="grid", width = 300, height = 120) #create the password reset window
     old_pass_text = Text(pass_reset_win, text="Old Password:" , grid=[1,1]) #add old password text
@@ -400,7 +446,7 @@ with picamera.PiCamera() as camera: #start up the camera
     conf_pass_text = Text(pass_reset_win, text="Confirm New Password:" , grid=[1,3]) #add password confirm text
     conf_pass_input = TextBox(pass_reset_win, grid=[2,3]) #add password confirm textbox
     pass_reset_button = PushButton(pass_reset_win, command=reset_pass, text="set", grid=[2,4]) #add password set button
-    pass_reset_win.hide()
+    pass_reset_win.hide() #conceal the password reset window
 
     #Settings Window Setup--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     set_win = Window(app, title="Settings",layout="grid", width = 900, height = 600) #create the settings window
@@ -460,7 +506,7 @@ with picamera.PiCamera() as camera: #start up the camera
     #add settings buttons
     help_but = PushButton(set_win, command=request_setting_help, text="Help", grid=[2,8]) #create button widget for help popup
     close_but = PushButton(set_win, command=close_settings, text="Close", grid=[3,8]) #create button widget to be able to close settings page (just executes hide command)
-    placeholder_but = PushButton(set_win, command=print("placeholder"), text="palceholder", grid=[4,8]) #depreceated feature
+    but = PushButton(set_win, command=print("placeholder"), text="Placeholder", grid=[4,8]) #Depreceated button
     new_pass_but = PushButton(set_win, command=pass_reset_win.show, text="Reset Password", grid=[5,8]) #create button widget to reset the password
     transmit_but = PushButton(set_win, command=transmit, text="Manually Transmit", grid=[1,8]) #create button widget to reset the password
 

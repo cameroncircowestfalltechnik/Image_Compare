@@ -3,17 +3,58 @@ from time import sleep
 import subprocess
 import time
 import shutil
+import csv
 
+client_receipt_path = "/home/pi/Desktop/recieve/results/client_receipt.csv" #define the location of the client receipt
+server_receipt_path = "/home/pi/Desktop/recieve/server_receipt.csv" #define the location of the server receipt
+results_path = "/home/pi/Desktop/recieve/results/" #define the location where files are recieved to
+image_path = results_path+"images/" #define the location of recieved images
+processing_path = "/home/pi/Desktop/processing/" #define location of processing folder
+archive_path = "/home/pi/Desktop/archive/" #defifne location of archive folder
+server_receipt_dest = "/home/pi/Desktop/recieve" #define where in the client the server receipt should go
+
+#intialize variables
+curr_size = 0 #initialize varaible to track current image folder size
+
+#check for files
 while True: #forever do the following
-    file_exists = os.path.exists('/home/pi/Desktop/recieve/results/z.csv') #check that z.csv has been recieved (named as to be recieved last, ie. indicating all files have been recieved)
+    file_exists = os.path.exists(client_receipt_path) #check that client receipt has been recieved
+   
+   #recieve files
     if file_exists == True: #if it has been recieved
-        print("recieved") #print as such
-        subprocess.run(["scp","/home/pi/Desktop/recieve/receipt.csv", "pi@192.168.0.24:/home/pi/Desktop/recieve"]) #send a reciept
-        shutil.copy('/home/pi/Desktop/recieve/results/log.csv', '/home/pi/Desktop/processing/log.csv') #copy the log to the processing folder
-        shutil.rmtree('/home/pi/Desktop/processing/current/') #delete old processing folder
-        shutil.copytree('/home/pi/Desktop/recieve/results/', '/home/pi/Desktop/processing/current/') #copy the results to the processing folder
-        os.rename("/home/pi/Desktop/recieve/results" , "/home/pi/Desktop/archive/"+time.asctime()) #move the results to the archive and timestamp it
+        
+        sleep(0.1) #wait a moment for the images folder to show up
+        
+        #read info from client receipt
+        with open(client_receipt_path, 'r') as r: #open the client receipt in read mode
+            reader = csv.reader(r) #create reader
+            size = next(reader) #read the first line as the image folder size
+            client_ip = next(reader) #read the second line as the client ip
+        size = int(size[0]) #convert from single element list to interger
+        client_ip = client_ip[0] #convert from single element list to string
+        #print("client ip: "+client_ip) #print the client ip
+        
+        #wait until the recieved image folder size is the same as the client receipt says it should be
+        while curr_size < size:
+            curr_size = 0
+            for n in os.scandir(image_path): #for every item in the image folder do the following
+                curr_size = curr_size+os.path.getsize(n) #add its size to the counter
+            #print(curr_size)
+            print("Recieved:"+str(round((curr_size/size)*100,1))+"%") #print the recieved folder size as a percent of expected
+            sleep(0.1) #wait before checking size again to lower resource use
+        
+        #indicate file reception
+        print("Transfer Complete") #print file transfer complete
+        subprocess.run(["scp",server_receipt_path, "pi@"+client_ip+":"+server_receipt_dest]) #send server reciept
+        
+        #save files to desired locations
+        shutil.copy(results_path+'log.csv', processing_path+'log.csv') #copy the log to the processing folder
+        shutil.rmtree(processing_path+'current/') #delete old processing folder
+        shutil.copytree(results_path, processing_path+'current/') #copy the results to the processing folder
+        os.rename(results_path , archive_path+time.asctime()) #move the results to the archive and timestamp it
         quit() #close the program
+        
+    #what to do if the client receipt is not present yet
     else: #if it has not been recieved
         print("waiting") #print as such
     sleep(0.1) #wait 0.1s to reduce resource use
