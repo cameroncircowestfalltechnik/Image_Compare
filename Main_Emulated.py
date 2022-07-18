@@ -1,7 +1,7 @@
 # #!/usr/bin/python #uncomment to designate the program as executable
 from PIL import ImageTk
 import PIL
-from guizero import App,Text,TextBox,PushButton,Picture,question,Window,Combo,info#,Image
+from guizero import App,Text,TextBox,PushButton,Picture,question,Window,Combo,info,Box#,Image
 import time
 import tkinter as tk
 from gpiozero import Button
@@ -15,7 +15,7 @@ from PIL import ImageChops
 from PIL import ImageEnhance
 import matplotlib.pyplot as plt
 import subprocess
-
+import tkinter as tk
 
 #setup-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 setup_start = time.time() #start startup timer
@@ -164,20 +164,28 @@ def reset_alarm(): #define code to reset the alarm
     app.bg = "light grey"
     
 def request_settings(): #define code to request the openeing of the settings page
-    password = app.question(title="password", question="Enter Password:", initial_value=None) #launch popup window requesting password
+    toggle_keyboard()
+    pass_win.show()
+    pass_input.focus()
+
+def check_pass():
+    password = pass_input.value
     if password == None: #if nothing is put in
         pass #do nothing, window closes
     elif password == current_password: #if the password is correct
         print("password correct!") #report into terminal
+        pass_win.hide()
         set_win.show() #make settings window visible
+        pass_input.value = ""
     else: #if the password is incorrect
         app.error("Warning", "Wrong Password") #create a new popup stating wrong password
-        
+
 def request_setting_help(): #define code behind the settings help button
     help_info = set_win.info("Help", "Add helpful text describing all the settings here") #create a popup with helpful text
 
 def close_settings():
     sett_close = set_win.yesno("Restart?", "Restart program to send camera new settings? (Not rquired if changing rotation, sensitivity, or threshold)") #create popup to ask if user wants to restart
+    toggle_keyboard()
     if sett_close == True: #if the answer is yes
         restart() #restart the program (maybe just migrate this out of a function if this is the only refrence)
     else: #otherwise
@@ -313,6 +321,7 @@ def reset_pass(): #define code to change the password
         new_pass_input.value = ""
         conf_pass_input.value = ""
         pass_reset_win.hide() #conceal password reset window
+        
 #create functions to check each box for an enter press
 def iso_enter(event):
     if event.key == "\r": #check if key pressed is enter
@@ -338,8 +347,14 @@ def sens_enter(event):
     if event.key == "\r": #check if key pressed is enter
         change_sens() #update the entry
 
-
-
+def pass_reset_enter(event):
+    if event.key == "\r": #check if key pressed is enter
+        reset_pass() #update the entry
+        
+def pass_enter(event):
+    if event.key == "\r": #check if key pressed is enter
+        check_pass() #update the entry
+        
 #Utility Functions------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 def check_size(dest): #create function to check if folder size is greater than max
     global size_max  #make max size readable
@@ -372,6 +387,9 @@ def restart():
 def transmit():
     subprocess.Popen(["python", "Main_Emulated_Transmit.py"]) #run the transmit script
 
+def toggle_keyboard():
+    subprocess.Popen(["toggle-matchbox-keyboard.sh"]) #attempt to run matchbox keyboard
+
 #Main Window----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #convert_img("ref") #convert image to png
 with picamera.PiCamera() as camera: #start up the camera
@@ -384,6 +402,7 @@ with picamera.PiCamera() as camera: #start up the camera
     camera.wait_recording(0.25) #allow the camera to run a second to allow it to autofocus
     #setup main window
     app = App(title='main', layout='auto', width = 900, height = 575+50) #create the main application window
+    app.when_closed=quit #when the close button is pressed on the main window, stop the program
     pic = Picture(app, image="/home/pi/Desktop/Object_Detection/compare/ref.jpg", align='top') #create picture widget
     reset_button = PushButton(app, command=reset_alarm, text="Reset", align='bottom') #define reset button widget
     settings_button = PushButton(app, command=request_settings, text="Settings", align='bottom') #define settings button widget
@@ -391,8 +410,16 @@ with picamera.PiCamera() as camera: #start up the camera
     pic.repeat(1, check_button) #attach repeat widget to the picture widget to run "check_button" every 1ms
     #reset_button.repeat(500, check_alarm)
 
+    #Password Entry Window
+    pass_win = Window(app, title="Enter Password",layout="auto", width = 300, height = 100, visible=False) #create the password reset window
+    pass_input = TextBox(pass_win, align='top') #add old password textbox
+    pass_button_box = Box(pass_win, width=100, height=50, align='bottom') #create a container for password window buttons
+    pass_cancel = PushButton(pass_button_box, command=pass_win.hide, text="Cancel", align='right')
+    pass_ok = PushButton(pass_button_box, command=check_pass, text="Ok", align='left')
+    pass_input.when_key_pressed = pass_enter #if a key is pressed in the text box run the enter check
+
     #Password Reset Window Setup------------------------------------------------------------------------------------------------------------------------------------------------------------
-    pass_reset_win = Window(app, title="Password Reset",layout="grid", width = 300, height = 120) #create the password reset window
+    pass_reset_win = Window(app, title="Password Reset",layout="grid", width = 300, height = 120, visible=False) #create the password reset window
     old_pass_text = Text(pass_reset_win, text="Old Password:" , grid=[1,1]) #add old password text
     old_pass_input = TextBox(pass_reset_win, grid=[2,1]) #add old password textbox
     new_pass_text = Text(pass_reset_win, text="New Password:" , grid=[1,2]) #add new password text
@@ -400,10 +427,10 @@ with picamera.PiCamera() as camera: #start up the camera
     conf_pass_text = Text(pass_reset_win, text="Confirm New Password:" , grid=[1,3]) #add password confirm text
     conf_pass_input = TextBox(pass_reset_win, grid=[2,3]) #add password confirm textbox
     pass_reset_button = PushButton(pass_reset_win, command=reset_pass, text="set", grid=[2,4]) #add password set button
-    pass_reset_win.hide()
+    conf_pass_input.when_key_pressed = pass_reset_enter #if a key is pressed in the text box run the enter check
 
     #Settings Window Setup--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    set_win = Window(app, title="Settings",layout="grid", width = 900, height = 600) #create the settings window
+    set_win = Window(app, title="Settings",layout="grid", width = 900, height = 600, visible=False) #create the settings window
 
     #create section for ISO
     iso_curr_text = Text(set_win, text="Current ISO: "+str(iso), grid=[1,1]) #define text widget to display current value
@@ -460,11 +487,9 @@ with picamera.PiCamera() as camera: #start up the camera
     #add settings buttons
     help_but = PushButton(set_win, command=request_setting_help, text="Help", grid=[2,8]) #create button widget for help popup
     close_but = PushButton(set_win, command=close_settings, text="Close", grid=[3,8]) #create button widget to be able to close settings page (just executes hide command)
-    placeholder_but = PushButton(set_win, command=print("placeholder"), text="palceholder", grid=[4,8]) #depreceated feature
+    #placeholder_but = PushButton(set_win, command=print("placeholder"), text="placeholder", grid=[4,8]) #depreceated feature
     new_pass_but = PushButton(set_win, command=pass_reset_win.show, text="Reset Password", grid=[5,8]) #create button widget to reset the password
     transmit_but = PushButton(set_win, command=transmit, text="Manually Transmit", grid=[1,8]) #create button widget to reset the password
-
-    set_win.hide() #make the settngs window invisible
 
     #Setup Finish------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     setup_end = time.time() #stop the timer

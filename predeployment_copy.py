@@ -17,9 +17,10 @@ import matplotlib.pyplot as plt
 import subprocess
 from gpiozero import DigitalInputDevice, DigitalOutputDevice
 import shutil
-
+import tkinter as tk
 
 #setup-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 setup_start = time.time() #start startup timer
 #I/O Setup
 mold_open = DigitalInputDevice(4) #assign input pin (GPIO4 or Pin 7) to mold open signal
@@ -48,6 +49,8 @@ filetype = ".jpg" #specify image file filetype (leftover debug)
 n = 0 #startup image counter
 res_max = (3280, 2464) #define the max camera resolution
 size_max = 500000000 #set max output folder size (currently 500MB)
+alarm_access = False #intialize Alarm lockout
+#root = tk.Tk()
 
 #open the log file
 log = open(log_path, "a") #open log csv file in "append mode"
@@ -159,29 +162,46 @@ def capture(name):
 def reset_alarm(): #define code to reset the alarm
     print("Alarm Reset") #placeholder: print text
     app.bg = "light grey"
-    alarm_reset_pin.blink(on_time=0.1,n=1) #make the alarm line "blink" for 0.1s once
+    if alarm_access:alarm_reset_pin.blink(on_time=0.1,n=1) #make the alarm line "blink" for 0.1s once
     
 def simulate_alarm(): #define the code to simulate the alarm
     app.bg = 'tomato' #set app color to red
     print("simulate alarm")
-    alarm_pin.blink(on_time=0.1,n=1) #make the alarm line "blink" for 0.1s once
+    if alarm_access:alarm_pin.blink(on_time=0.1,n=1) #if alarm access is enabled make the alarm line "blink" for 0.1s once
     
     
 def request_settings(): #define code to request the openeing of the settings page
-    password = app.question(title="password", question="Enter Password:", initial_value=None) #launch popup window requesting password
+    toggle_keyboard()
+    pass_win.show()
+    pass_input.focus()
+    #password = app.question(title="password", question="Enter Password:", initial_value=None) #launch popup window requesting password
+    #password.tk.geometry('250x250+600+600')
+    #if password == None: #if nothing is put in
+    #    pass #do nothing, window closes
+    #elif password == current_password: #if the password is correct
+    #    print("password correct!") #report into terminal
+    #    set_win.show() #make settings window visible
+    #else: #if the password is incorrect
+    #    app.error("Warning", "Wrong Password") #create a new popup stating wrong password
+
+def check_pass():
+    password = pass_input.value
     if password == None: #if nothing is put in
         pass #do nothing, window closes
     elif password == current_password: #if the password is correct
         print("password correct!") #report into terminal
+        pass_win.hide()
         set_win.show() #make settings window visible
+        pass_input.value = ""
     else: #if the password is incorrect
         app.error("Warning", "Wrong Password") #create a new popup stating wrong password
-        
+
 def request_setting_help(): #define code behind the settings help button
     help_info = set_win.info("Help", "Add helpful text describing all the settings here") #create a popup with helpful text
 
 def close_settings():
     sett_close = set_win.yesno("Restart?", "Restart program to send camera new settings? (Not rquired if changing rotation, sensitivity, or threshold)") #create popup to ask if user wants to restart
+    toggle_keyboard()
     if sett_close == True: #if the answer is yes
         restart() #restart the program (maybe just migrate this out of a function if this is the only refrence)
     else: #otherwise
@@ -317,6 +337,7 @@ def reset_pass(): #define code to change the password
         new_pass_input.value = ""
         conf_pass_input.value = ""
         pass_reset_win.hide() #conceal password reset window
+
 #create functions to check each box for an enter press
 def iso_enter(event):
     if event.key == "\r": #check if key pressed is enter
@@ -342,8 +363,14 @@ def sens_enter(event):
     if event.key == "\r": #check if key pressed is enter
         change_sens() #update the entry
 
-
-
+def pass_reset_enter(event):
+    if event.key == "\r": #check if key pressed is enter
+        reset_pass() #update the entry
+        
+def pass_enter(event):
+    if event.key == "\r": #check if key pressed is enter
+        check_pass() #update the entry
+        
 #Utility Functions------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 def check_size(dest): #create function to check if folder size is greater than max
     global size_max  #make max size readable
@@ -377,7 +404,17 @@ def check_button():
         print("") #add an empty line
         print(current_time +": Resetting alarm") #report button status
         reset_alarm() #reset the alarm
-    
+
+def toggle_alarm_access():
+    global alarm_access
+    if alarm_access == True:
+        alarm_access = False
+        print("Disabling Alarm")
+    elif alarm_access == False:
+        alarm_access = True
+        print("Enabling Alarm")
+    alarm_lock.text = "Alarm access is "+str(alarm_access)
+
 def restart():
     camera.close() #shutoff the camera
     app.destroy() #kill the new windows created by the programs
@@ -386,7 +423,11 @@ def restart():
 def transmit():
     #DISABLED
     #subprocess.Popen(["python", "Main_Emulated_Transmit.py"]) #run the transmit script
+    print("transmission disabled on this version")
     pass
+
+def toggle_keyboard():
+    subprocess.Popen(["toggle-matchbox-keyboard.sh"]) #attempt to run matchbox keyboard
 
 def set_control(name):
     print("resetting "+name)
@@ -411,16 +452,19 @@ with picamera.PiCamera() as camera: #start up the camera
     camera.start_recording(stream, format='h264') #start recording to the stream
     camera.wait_recording(0.25) #allow the camera to run a second to allow it to autofocus
     
-    app = App(title='main', layout='auto', width = 900, height = 575+50+50) #create the main application window
+    #app = App(title='main', layout='auto', width = 900, height = 575+50+50) #create the main application window
+    app = App(title='main', layout='auto', width = 1920, height = 1080) #create the main application window
+    app.when_closed=quit #when the close button is pressed on the main window, stop the program
+    #app.set_full_screen()
     #control preview------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    full_preview = Window(app, title="full preview", width=800, height=550) #create a "full" preview window
+    full_preview = Window(app, title="full preview", width=800, height=550, visible=False) #create a "full" preview window
     full_pic = Picture(full_preview, image=comp_path+"full_ctrl"+filetype) #add the current full control as an image
     full_pic_close = PushButton(full_preview, command=full_preview.hide, text="close") #add close button
-    empty_preview = Window(app, title="empty preview", width=800, height=550) #create an "empty" preview window
+    empty_preview = Window(app, title="empty preview", width=800, height=550, visible=False) #create an "empty" preview window
     empty_pic = Picture(empty_preview, image=comp_path+"empty_ctrl"+filetype) #add the curent empty control as an image
     empty_pic_close = PushButton(empty_preview, command=empty_preview.hide, text="close") #add close button
-    full_preview.hide() #conceal the full preview
-    empty_preview.hide() #conceal the empty preview
+    #full_preview.hide() #conceal the full preview
+    #empty_preview.hide() #conceal the empty preview
     
     #setup main window-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     pic = Picture(app, image="/home/pi/Desktop/Object_Detection/compare/ref.jpg", align='top') #create picture widget
@@ -430,15 +474,26 @@ with picamera.PiCamera() as camera: #start up the camera
     row2 = Box(app, width=300, height=50, align='bottom') #create a container for the control set buttons, call it row2
     ctrl_set_full = PushButton(row2, command=lambda: set_control("full"), text="Reset Full Control", align='left')
     ctrl_set_empty = PushButton(row2, command=lambda: set_control("empty"), text="Reset Empty Control", align='right')
-    row3 = Box(app, width=350, height=50, align='bottom') #create a container for the control preview buttons, call it row3
+    row3 = Box(app, width=320, height=50, align='bottom') #create a container for the control preview buttons, call it row3
     empty_see = PushButton(row3, command=empty_preview.show, text="Preview Empty Control", align='right')
     full_see = PushButton(row3, command=full_preview.show, text="Preview Full Control", align='left')
-    settings_button = PushButton(app, command=request_settings, text="Settings", align='bottom') #define settings button widget
+    row4 = Box(app, width=240, height=50, align='bottom') #create a container for the control preview buttons, call it row3
+    settings_button = PushButton(row4, command=request_settings, text="Settings", align='left') #define settings button widget
+    alarm_lock = PushButton(row4, command=toggle_alarm_access, text="Alarm access is "+str(alarm_access), align='right') #define settings button widget
     pic.repeat(1, check_button) #attach repeat widget to the picture widget to run "check_button" every 1ms
     #reset_button.repeat(500, check_alarm)
     
+    #Password Entry Window
+    pass_win = Window(app, title="Enter Password",layout="auto", width = 300, height = 100, visible=False) #create the password reset window
+    pass_input = TextBox(pass_win, align='top') #add old password textbox
+    pass_button_box = Box(pass_win, width=100, height=50, align='bottom') #create a container for password window buttons
+    pass_cancel = PushButton(pass_button_box, command=pass_win.hide, text="Cancel", align='right')
+    pass_ok = PushButton(pass_button_box, command=check_pass, text="Ok", align='left')
+    pass_input.when_key_pressed = pass_enter #if a key is pressed in the text box run the enter check
+    #pass_win.hide()
+    
     #Password Reset Window Setup------------------------------------------------------------------------------------------------------------------------------------------------------------
-    pass_reset_win = Window(app, title="Password Reset",layout="grid", width = 300, height = 120) #create the password reset window
+    pass_reset_win = Window(app, title="Password Reset",layout="grid", width = 300, height = 120, visible=False) #create the password reset window
     old_pass_text = Text(pass_reset_win, text="Old Password:" , grid=[1,1]) #add old password text
     old_pass_input = TextBox(pass_reset_win, grid=[2,1]) #add old password textbox
     new_pass_text = Text(pass_reset_win, text="New Password:" , grid=[1,2]) #add new password text
@@ -446,10 +501,11 @@ with picamera.PiCamera() as camera: #start up the camera
     conf_pass_text = Text(pass_reset_win, text="Confirm New Password:" , grid=[1,3]) #add password confirm text
     conf_pass_input = TextBox(pass_reset_win, grid=[2,3]) #add password confirm textbox
     pass_reset_button = PushButton(pass_reset_win, command=reset_pass, text="set", grid=[2,4]) #add password set button
-    pass_reset_win.hide() #conceal the password reset window
+    conf_pass_input.when_key_pressed = pass_reset_enter #if a key is pressed in the text box run the enter check
+    #pass_reset_win.hide() #conceal the password reset window
 
     #Settings Window Setup--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    set_win = Window(app, title="Settings",layout="grid", width = 900, height = 600) #create the settings window
+    set_win = Window(app, title="Settings",layout="grid", width = 900, height = 600, visible=False) #create the settings window
 
     #create section for ISO
     iso_curr_text = Text(set_win, text="Current ISO: "+str(iso), grid=[1,1]) #define text widget to display current value
@@ -506,11 +562,11 @@ with picamera.PiCamera() as camera: #start up the camera
     #add settings buttons
     help_but = PushButton(set_win, command=request_setting_help, text="Help", grid=[2,8]) #create button widget for help popup
     close_but = PushButton(set_win, command=close_settings, text="Close", grid=[3,8]) #create button widget to be able to close settings page (just executes hide command)
-    but = PushButton(set_win, command=print("placeholder"), text="Placeholder", grid=[4,8]) #Depreceated button
+    #but = PushButton(set_win, command=print("placeholder"), text="Placeholder", grid=[4,8]) #Depreceated button
     new_pass_but = PushButton(set_win, command=pass_reset_win.show, text="Reset Password", grid=[5,8]) #create button widget to reset the password
     transmit_but = PushButton(set_win, command=transmit, text="Manually Transmit", grid=[1,8]) #create button widget to reset the password
 
-    set_win.hide() #make the settngs window invisible
+    #set_win.hide() #make the settngs window invisible
 
     #Setup Finish------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     setup_end = time.time() #stop the timer
