@@ -32,7 +32,7 @@ I was recently asked to deploy my system on a machine that was malfunctioning. A
   -Changed I/O to feature digitial input/output for alarm signals and mold status.  
   -Changed workflow of image capture to be inline with actual use case. Ie. a single control image is maintained as opposed to taking a new one every time.  
   -Designed to maintain images and adapt processing for two image states.  
-  -Added Gui elements to rest and view the control images.  
+  -Added Gui elements to rest and view the control images as well as toggle access to alarms.  
   -File transmission to the server was removed.  
 
 # Files 
