@@ -17,6 +17,7 @@ The general flow of the program is the following:
   -Emulate alarm/alarm reset  
   -Transmit the files  
   -Reset the password  
+  -open/close a touchscreen keyboard  
  I recommend going through the code line by line for exact detail as I commented just about every line
  
 ### Main_Emulated_Startup.py
@@ -40,6 +41,8 @@ I was recently asked to deploy my system on a machine that was malfunctioning. A
 This is a sample of my current config file. It stores the following in this order, password, ISO, shutter speed, camera mode, image width, image height, image rotation, image detection threshold, and sensitivity.  
 ### server_receipt.csv
 This is the receipt the server sends to the client. It has not contents and more or less acts as a way for the transmit script to check for a file sent from the server. This could be a good way for the server to send back some info similar to the client receipt discussed below.  
+### start.desktop
+I followed [this tutorial](https://learn.sparkfun.com/tutorials/how-to-run-a-raspberry-pi-program-on-startup/method-2-autostart) on setting up programs to run on boot with a GUI. Currently, in my system, its destination folder is /home/pi/.config/autostart. On the pi the file is called "prog" not "start" but this is likely a difference in raspbian vs windows choosing how to display as "prog" is defined in the contents of the file. In the current setup in just launches predeployment_copy.py but in the main deployment will run Main_Emulated_Startup.py.  
 
 
 # Results folder
