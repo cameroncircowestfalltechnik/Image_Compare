@@ -33,7 +33,7 @@ comp_dir = "/home/pi/Desktop/Object_Detection/compare/compare_" #specify image f
 #kill the startup program
 try: #attempt the following
     os.system("cd /home/pi/Desktop") #navigate to program location (probably redundant)
-    os.system("\n pkill Main_Emulated_Startup.py") #kill the startup script-
+    os.system("\n pkill Main_Emulated_Startup.py") #kill the startup script
 except: #upon fail (likely indicating this program was started without the startup prgram being run
     pass #do nothing
 
@@ -61,19 +61,20 @@ res = (int(lines[4]),int(lines[5])) #read lines 4/5 as the camera resolution
 rot = int(lines[6]) #read line 6 as the image rotation
 thresh = int(lines[7]) #read line 7 as the image detection threshold
 sens = float(lines[8].strip()) #read line 8 as the image detection sensitivity
+server_ip = lines[9].strip()
 
 #write to startup log
 startup_log = open(startup_log_path, "a") #open startup log csv file in "append mode"
-startup_log.write(time.asctime()+","+current_password+","+str(iso)+","+str(ss)+","+cm+","+str(res[0])+","+str(res[1])+","+str(rot)+","+str(thresh)+","+str(sens)+"\n") #write the current time and settings to the startup log
+startup_log.write(time.asctime()+","+current_password+","+str(iso)+","+str(ss)+","+cm+","+str(res[0])+","+str(res[1])+","+str(rot)+","+str(thresh)+","+str(sens)+","+server_ip+"\n") #write the current time and settings to the startup log
 startup_log.close() #close the startup log (auto saves new data)
 
 #The Camera Zone------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-def work():
+def work(): #define function to process images
     global cap_start #set start time as global so the total decision time can be calculated
     process_start = time.time() #start image processing timer
-    base = Image.open(comp_dir+'1'+filetype) #load control image
-    comp = Image.open(comp_dir+'2'+filetype) #load comparison image
+    base = Image.open(comp_dir+'1'+filetype) #load control image (named "compare_1.jpg")
+    comp = Image.open(comp_dir+'2'+filetype) #load comparison image (named "compare_2.jpg")
     
     #base = Image.open("/home/pi/Desktop/Object_Detection/compare2/Base.jpg") #override images
     #comp = Image.open("/home/pi/Desktop/Object_Detection/compare2/REF.jpg")
@@ -128,13 +129,8 @@ def work():
     disp_time = disp_end - disp_start #calculate elapsed time since display start
     print('Display time: {} seconds'.format(disp_time)) #display the display time
 
-def capture():
+def capture(): #define code to capture images
     global n
-    #camera.exposure_mode = cm
-    #camera.shutter_speed = ss
-    #camera.iso = iso
-    #camera.resolution = res #specify resolution
-    #button.wait_for_press() #wait for button to be bumped
     button.wait_for_release()
     global cap_start
     cap_start = time.time() #start image capture timer
@@ -149,7 +145,7 @@ def capture():
     
     cap_end = time.time() #stop the image capture time
     cap_time = cap_end - cap_start #calculate elapsed time
-    print('Capture '+str(n)+' took: {} seconds'.format(cap_time)) #display it.
+    print('Capture '+str(n)+' took: {} seconds'.format(cap_time)) #display capture number and time taken
     
     if n == 2: #if the image counter is two do the following:
         n=0 #reset the image counter
@@ -162,11 +158,11 @@ def reset_alarm(): #define code to reset the alarm
     app.bg = "light grey"
     
 def request_settings(): #define code to request the openeing of the settings page
-    toggle_keyboard("open")
+    keyboard("open")
     pass_win.show()
     pass_input.focus()
 
-def check_pass():
+def check_pass(): #define function to check the password entered
     password = pass_input.value
     if password == None: #if nothing is put in
         pass #do nothing, window closes
@@ -174,16 +170,23 @@ def check_pass():
         print("password correct!") #report into terminal
         pass_win.hide()
         set_win.show() #make settings window visible
-        pass_input.value = ""
+        pass_input.value = "" #clear the password textbox
     else: #if the password is incorrect
         app.error("Warning", "Wrong Password") #create a new popup stating wrong password
 
 def request_setting_help(): #define code behind the settings help button
-    help_info = set_win.info("Help", "Add helpful text describing all the settings here") #create a popup with helpful text
+    help_info = set_win.info("Help", """ISO: Determine sensitivity to light, lower=darker and higher=brighter.\n
+Shutter Speed: How fast the image is taken: A higher shutter speed makes an images less blurry, however the image is darker as there is less time to take in light. The opposite goes for a low shutter speed, it will be more blurry yet brighter.\n
+Shutter mode: Defines the camera mode. Auto:oriented for normal image capture. Sports:auto but oriented for higher shutter speed. OFF: Special mode that locks camera settings.\n
+Image Rotation: Rotate displayed image. For use if camera needs to be mounted upside-down or sideways.\n
+Camera Resolution: Defines the size of the image take (width x height). A higher resolution contains more detail but takes more time to process.\n
+Decision Threshold: Defines the number of pixels that are different between the control and sample to setoff the alarm.\n
+Contrast sensitivity: How sensitive program is to flag a pixel as different from the control. Higher means more likely.\n
+Manually Transmit: Manually run the scheduled file upload from the client(this machine) to the server.""") #create a popup with helpful text
 
-def close_settings():
+def close_settings(): #define code to clsoe the settings window
     sett_close = set_win.yesno("Restart?", "Restart program to send camera new settings? (Not rquired if changing rotation, sensitivity, or threshold)") #create popup to ask if user wants to restart
-    toggle_keyboard("close")
+    keyboard("close")
     if sett_close == True: #if the answer is yes
         restart() #restart the program (maybe just migrate this out of a function if this is the only refrence)
     else: #otherwise
@@ -297,6 +300,18 @@ def change_sens(): #define code to change the sensitivity
         config_write(8,sens) #save to config file
         sens_curr_text.value = "Current Contrast Sensitivity: "+str(sens) #update window text
         sens_input.value = "" #clear the textbox
+        
+def change_sip(): #define code to change the server ip
+    try: #attempt the following
+        new_sip = str(sip_input.value) #grab input and ensure it's converted to string
+    except: #if it fails
+        app.error("Warning", "invalid input, not saving")
+    else: #otherwise
+        print("Setting Server IP to:"+new_sip) #print to terminal
+        server_ip = new_sip #update the current value
+        config_write(9,server_ip) #save to config file
+        sip_curr_text.value = "Current Server IP: "+str(server_ip) #update window text
+        sip_input.value = "" #clear the textbox
 
 def reset_pass(): #define code to change the password
     global current_password #set current password as global variable
@@ -345,6 +360,10 @@ def sens_enter(event):
     if event.key == "\r": #check if key pressed is enter
         change_sens() #update the entry
 
+def sip_enter(event):
+    if event.key == "\r": #check if key pressed is enter
+        change_sip() #update the entry
+
 def pass_reset_enter(event):
     if event.key == "\r": #check if key pressed is enter
         reset_pass() #update the entry
@@ -378,19 +397,21 @@ def check_button():
     if button.is_pressed: capture() #if button is pressed run "capture"
     
 def restart():
+    keyboard("close") #close the keyboard
     camera.close() #shutoff the camera
     app.destroy() #kill the new windows created by the programs
     os.system("\n sudo python Main_Emulated_Startup.py") #run the prgram startup script
     
 def shutdown():
+    keyboard("close") #close the keyboard
     camera.close() #shutoff the camera
     app.destroy() #kill the new windows created by the programs
     quit()
     
-def transmit():
-    subprocess.Popen(["python", "Main_Emulated_Transmit.py"]) #run the transmit script
+def transmit(): #define code to transmit files to server
+    subprocess.Popen(["python", "Main_Emulated_Transmit.py", "-sip", server_ip]) #run the transmit script
 
-def toggle_keyboard(arg):        
+def keyboard(arg): #define code to open/close/toggle the popup keyboard   
     if arg == "open": #if the argument is asking to open the keyboard do the following
         try: #attempt the following
             prog_id = subprocess.check_output(['pidof', 'matchbox-keyboard']) #read the program id of the keyboard
@@ -414,19 +435,21 @@ def toggle_keyboard(arg):
         subprocess.Popen(["toggle-matchbox-keyboard.sh"]) #toggle the keyboard
     
     else: #if an unspecified argument is entered
-        print("toggle_keyboard: invalid argument") #print an error
+        print("keyboard: invalid argument") #print an error
 
 #Main Window----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-#convert_img("ref") #convert image to png
 with picamera.PiCamera() as camera: #start up the camera
+    #set camera settings
     camera.exposure_mode = cm #set camera mode
     camera.shutter_speed = ss #set shutter speed
     camera.iso = iso #set camera iso
     camera.resolution = res #set camera resolution
+    #start video stream
     stream = picamera.PiCameraCircularIO(camera, seconds=1) #generate a camera stream in which the camera retains 1 second of footage
     camera.start_recording(stream, format='h264') #start recording to the stream
-    camera.wait_recording(0.25) #allow the camera to run a second to allow it to autofocus
-    #setup main window
+    camera.wait_recording(0.25) #allow the camera to run a moment to allow it to autofocus
+   
+   #setup main window
     app = App(title='main', layout='auto', width = 900, height = 575+50) #create the main application window
     app.when_closed=shutdown #when the close button is pressed on the main window, stop the program
     pic = Picture(app, image="/home/pi/Desktop/Object_Detection/compare/ref.jpg", align='top') #create picture widget
@@ -508,15 +531,20 @@ with picamera.PiCamera() as camera: #start up the camera
     sens_input.when_key_pressed = sens_enter #if a key is pressed in the text box run the enter check
     sens_set = PushButton(set_win, command=change_sens, text="set", grid=[4,7])
     sens_rec_text = Text(set_win, text="Suggested range: 3-15 (decimal)", grid=[5,7])
-
-
+    
+    #create secton for server ip (setup identical to ISO, see that section for line by line)
+    sip_curr_text = Text(set_win, text="Current Server IP: "+server_ip, grid=[1,8])
+    sip_input = TextBox(set_win, grid=[2,8])
+    sip_input.when_key_pressed = sip_enter #if a key is pressed in the text box run the enter check
+    sip_set = PushButton(set_win, command=change_sip, text="set", grid=[4,8])
+    sip_rec_text = Text(set_win, text="Default: 192.168.0.159", grid=[5,8])
 
     #add settings buttons
-    help_but = PushButton(set_win, command=request_setting_help, text="Help", grid=[2,8]) #create button widget for help popup
-    close_but = PushButton(set_win, command=close_settings, text="Close", grid=[3,8]) #create button widget to be able to close settings page (just executes hide command)
-    #placeholder_but = PushButton(set_win, command=print("placeholder"), text="placeholder", grid=[4,8]) #depreceated feature
-    new_pass_but = PushButton(set_win, command=pass_reset_win.show, text="Reset Password", grid=[5,8]) #create button widget to reset the password
-    transmit_but = PushButton(set_win, command=transmit, text="Manually Transmit", grid=[1,8]) #create button widget to reset the password
+    help_but = PushButton(set_win, command=request_setting_help, text="Help", grid=[2,9]) #create button widget for help popup
+    close_but = PushButton(set_win, command=close_settings, text="Close", grid=[3,9]) #create button widget to be able to close settings page (just executes hide command)
+    #placeholder_but = PushButton(set_win, command=print("placeholder"), text="placeholder", grid=[4,9]) #depreceated feature
+    new_pass_but = PushButton(set_win, command=pass_reset_win.show, text="Reset Password", grid=[5,9]) #create button widget to reset the password
+    transmit_but = PushButton(set_win, command=transmit, text="Manually Transmit", grid=[1,9]) #create button widget to reset the password
 
     #Setup Finish------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     setup_end = time.time() #stop the timer
