@@ -1,3 +1,3 @@
-Startup Time,Password,ISO,Shutter Speed,Camera Mode,Resolution width,Resolution Height,Image Rotation,Threshold,sensitivity,server ip
+Startup Time,Password,ISO,Shutter Speed,Camera Mode,Resolution Width,Resolution Height,Image Rotation,Threshold,Sensitivity,Server IP
 Tue Jul 19 15:41:27 2022,123,710,10000,auto,852,480,0,7500,4.5,192.168.0.159
 Tue Jul 19 15:42:10 2022,123,710,10000,auto,852,480,0,7500,4.5,192.168.0.159
