@@ -20,7 +20,13 @@ import shutil
 import tkinter as tk
 
 #setup-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#os.mkdir('debug2')
+# os.chdir('/home/pi/Desktop')
 
+# if os.environ.get('DISPLAY','') == '':
+#     print('no display found. using 0.0')
+#     os.environ.__setitem__('DISPLAY',':0.0')
+    
 setup_start = time.time() #start startup timer
 #I/O Setup
 mold_open = DigitalInputDevice(4) #assign input pin (GPIO4 or Pin 7) to mold open signal
@@ -171,7 +177,7 @@ def simulate_alarm(): #define the code to simulate the alarm
     
     
 def request_settings(): #define code to request the openeing of the settings page
-    toggle_keyboard()
+    toggle_keyboard("open")
     pass_win.show()
     pass_input.focus()
     #password = app.question(title="password", question="Enter Password:", initial_value=None) #launch popup window requesting password
@@ -201,7 +207,7 @@ def request_setting_help(): #define code behind the settings help button
 
 def close_settings():
     sett_close = set_win.yesno("Restart?", "Restart program to send camera new settings? (Not rquired if changing rotation, sensitivity, or threshold)") #create popup to ask if user wants to restart
-    toggle_keyboard()
+    toggle_keyboard("close")
     if sett_close == True: #if the answer is yes
         restart() #restart the program (maybe just migrate this out of a function if this is the only refrence)
     else: #otherwise
@@ -419,6 +425,11 @@ def restart():
     camera.close() #shutoff the camera
     app.destroy() #kill the new windows created by the programs
     os.system("\n sudo python Main_Emulated_Startup.py") #run the prgram startup script
+
+def shutdown():
+    camera.close() #shutoff the camera
+    app.destroy() #kill the new windows created by the programs
+    quit()
     
 def transmit():
     #DISABLED
@@ -426,8 +437,31 @@ def transmit():
     print("transmission disabled on this version")
     pass
 
-def toggle_keyboard():
-    subprocess.Popen(["toggle-matchbox-keyboard.sh"]) #attempt to run matchbox keyboard
+def toggle_keyboard(arg):        
+    if arg == "open": #if the argument is asking to open the keyboard do the following
+        try: #attempt the following
+            prog_id = subprocess.check_output(['pidof', 'matchbox-keyboard']) #read the program id of the keyboard
+            prog_id = int(prog_id) #convert the id to an interger in order to remove superfluous text
+        except subprocess.CalledProcessError: #if an error is returned (the program id is not found and thus not running)
+            subprocess.Popen(["toggle-matchbox-keyboard.sh"]) #open matchbox keyboard
+        else: #if a the command runs fine (a program id is found)
+            pass #do nothing (these two lines are technically not needed but aid comprehension)
+    
+    elif arg == "close": #if the argument is asking to close the keyboard do the following
+        try: #attemp the following
+            prog_id = subprocess.check_output(['pidof', 'matchbox-keyboard']) #read the program id of the keyboard
+            prog_id = int(prog_id) #convert the id to an interger in order to remove superfluous text
+        except subprocess.CalledProcessError: #if an error is returned (the program id is not found and thus not running)
+            pass #do nothing
+        else: #if a the command runs fine (a program id is found)
+            prog_id = str(prog_id) #convert the program id back to a string
+            subprocess.run(['kill', prog_id]) #kill a program with the program id we grabbed above
+    
+    elif arg == "toggle": #if the argument is "toggle" do the following
+        subprocess.Popen(["toggle-matchbox-keyboard.sh"]) #toggle the keyboard
+    
+    else: #if an unspecified argument is entered
+        print("toggle_keyboard: invalid argument") #print an error
 
 def set_control(name):
     print("resetting "+name)
@@ -454,7 +488,7 @@ with picamera.PiCamera() as camera: #start up the camera
     
     #app = App(title='main', layout='auto', width = 900, height = 575+50+50) #create the main application window
     app = App(title='main', layout='auto', width = 1920, height = 1080) #create the main application window
-    app.when_closed=quit #when the close button is pressed on the main window, stop the program
+    app.when_closed=shutdown #when the close button is pressed on the main window, stop the program
     #app.set_full_screen()
     #control preview------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     full_preview = Window(app, title="full preview", width=800, height=550, visible=False) #create a "full" preview window
@@ -490,6 +524,7 @@ with picamera.PiCamera() as camera: #start up the camera
     pass_cancel = PushButton(pass_button_box, command=pass_win.hide, text="Cancel", align='right')
     pass_ok = PushButton(pass_button_box, command=check_pass, text="Ok", align='left')
     pass_input.when_key_pressed = pass_enter #if a key is pressed in the text box run the enter check
+    pass_win.tk.geometry('300x100+960+560') #respecify settings window size (redundant but required) then position. The window is moved here to be out of the way of the keyboard)
     #pass_win.hide()
     
     #Password Reset Window Setup------------------------------------------------------------------------------------------------------------------------------------------------------------
