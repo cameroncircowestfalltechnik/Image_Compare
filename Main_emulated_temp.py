@@ -4,6 +4,7 @@ import PIL
 from guizero import App,Text,TextBox,PushButton,Picture,question,Window,Combo,info,Box#,Image
 import time
 import tkinter as tk
+from gpiozero import Button
 import os
 import picamera
 from io import BytesIO
@@ -14,18 +15,12 @@ from PIL import ImageChops
 from PIL import ImageEnhance
 import matplotlib.pyplot as plt
 import subprocess
-from gpiozero import DigitalInputDevice, DigitalOutputDevice
-import shutil
 import tkinter as tk
 
 #setup-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 setup_start = time.time() #start startup timer
 #I/O Setup
-mold_open = DigitalInputDevice(4) #assign input pin (GPIO4 or Pin 7) to mold open signal
-ejector_fire = DigitalInputDevice(17) #assign input pin (GPIO17 or Pin 11) to ejector fire signal
-alarm_pin = DigitalOutputDevice(27) #assign output pin (GPIO27 or pin12) to alarm signal
-alarm_reset_pin = DigitalOutputDevice(23) #assign output pin (GPIO23 or pin 16) to alarm reset signal
-alarm_button = DigitalInputDevice(22) #assign input pin (GPIO22 or pin 15) to alarm reset button
+button = Button(4)
 
 #file path setup
 base_folder = "/home/pi/Desktop/main_emulated"
@@ -35,12 +30,12 @@ output_folder = base_folder+"/output"
 log_path = output_folder+"/log.csv" #specify log location
 startup_log_path = output_folder+"/startup_log.csv" #specify startup log location
 image_path = output_folder+"/images/" #specify output image path
-comp_path = comparison_folder+"/compare_" #specify image file location
+
 
 #kill the startup program
 try: #attempt the following
     os.system("cd /home/pi/Desktop") #navigate to program location (probably redundant)
-    os.system("\n pkill Main_Emulated_Startup.py") #kill the startup script-
+    os.system("\n pkill Main_Emulated_Startup.py") #kill the startup script
 except: #upon fail (likely indicating this program was started without the startup prgram being run
     pass #do nothing
 
@@ -49,12 +44,7 @@ good = True #create variable to hold pass/fail status
 filetype = ".jpg" #specify image file filetype (leftover debug)
 n = 0 #startup image counter
 res_max = (3280, 2464) #define the max camera resolution
-#manually define display dimensions (maybe switch this to autodetect later)
-display_width = 1920 #define display width
-display_height = 1080 #define display height
 size_max = 500000000 #set max output folder size (currently 500MB)
-alarm_access = False #intialize Alarm lockout
-server_ip = "192.168.0.159" #specify server IP
 
 #open the log file
 log = open(log_path, "a") #open log csv file in "append mode"
@@ -73,47 +63,28 @@ res = (int(lines[4]),int(lines[5])) #read lines 4/5 as the camera resolution
 rot = int(lines[6]) #read line 6 as the image rotation
 thresh = int(lines[7]) #read line 7 as the image detection threshold
 sens = float(lines[8].strip()) #read line 8 as the image detection sensitivity
+server_ip = lines[9].strip()
 
 #write to startup log
 startup_log = open(startup_log_path, "a") #open startup log csv file in "append mode"
-startup_log.write(time.asctime()+current_password+","+","+str(iso)+","+str(ss)+","+cm+","+str(res[0])+","+str(res[1])+","+str(rot)+","+str(thresh)+","+str(sens)+"\n") #write the current time and settings to the startup log
+startup_log.write(time.asctime()+","+current_password+","+str(iso)+","+str(ss)+","+cm+","+str(res[0])+","+str(res[1])+","+str(rot)+","+str(thresh)+","+str(sens)+","+server_ip+"\n") #write the current time and settings to the startup log
 startup_log.close() #close the startup log (auto saves new data)
 
 #The Camera Zone------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-#capture and process the image
-def capture(name):
-    global cap_start
-    cap_start = time.time() #start image capture timer
-    
-    #take picture
-    stream = BytesIO() #start writing camera stream to memory
-    camera.capture(stream, format='jpeg', use_video_port=True) #capture to the stream
-    stream.seek(0) #move to the first image captured
-    
-    #save the picture
-    img = Image.open(stream) #open the image
-    #img = img.save(comp_path+name+filetype) #save the image
-    img = img.save(comparison_folder+"/compare_"+name+".jpg") #save the image
-    
-    cap_end = time.time() #stop the image capture time
-    cap_time = cap_end - cap_start #calculate elapsed time
-    print('Capture "'+name+'" took: {} seconds'.format(cap_time)) #display it.
+
+def work(): #define function to process images
+    global cap_start #set start time as global so the total decision time can be calculated
     process_start = time.time() #start image processing timer
+    base = Image.open(comparison_folder+'/compare_1.jpg') #load control image (named "compare_1.jpg")
+    comp = Image.open(comparison_folder+'/compare_2.jpg') #load comparison image (named "compare_2.jpg")
     
-    #open the comparison image and control
-    try:
-        base = Image.open(comparison_folder+"/compare_"+name+"_ctrl.jpg") #load control image
-    except:
-        set_control(name) #set the current base image as the control
-        base = Image.open(comparison_folder+"/compare_"+name+"_ctrl.jpg") #load control image
-    comp = Image.open(comparison_folder+"/compare_"+name+".jpg") #load comparison image
-    
-    #find the difference
+    #base = Image.open("/home/pi/Desktop/Object_Detection/compare2/Base.jpg") #override images
+    #comp = Image.open("/home/pi/Desktop/Object_Detection/compare2/REF.jpg")
+
     diff = ImageChops.difference(base, comp) #find difference between images and name it diff
     diff = ImageOps.grayscale(diff) #convert the difference to black and white
     diff = diff.point( lambda p: 255 if p > 255/sens else 0) #turn any point above defined sensitivity white "255" and anything below black "0". Effectively turns grayscale to black and white.
     
-    #analyze the difference and do something with the results
     tot = np.sum(np.array(diff)/255) #convert diff to an array and find the elementwise sum, call it tot for "total". This represents the quantity of pixels that are different
     print('Score: '+str(tot)) #print the "total"
     if tot > thresh: #if the total number of diffent pixels are more than the defined threshold do the following:
@@ -127,28 +98,26 @@ def capture(name):
 
     process_end = time.time() #stop the timer
     process_time = process_end - process_start #calculate elapsed time since processing start
-    #print('Process time: {} seconds'.format(process_time)) #display the image processing time
+    print('Process time: {} seconds'.format(process_time)) #display the image processing time
     decision_time = process_end - cap_start #calculate elapsed time  since decision start
     print('Decision time: {} seconds'.format(decision_time)) #display the decision making time
+    
     disp_start = time.time() #start display time timer
     
-    #rotate images if needed
     base = base.rotate(rot) #rotate the control image if needed
     comp = comp.rotate(rot) #rotate the comparison image if needed
     diff = diff.rotate(rot) #rotate the difference image if needed
 
-    #generate the output image
     black = (0,0,0) #define black pixel rgb value
     color = (0,255,0) #define colored pixel rgb value (in this case it's currently green)
     diff = ImageOps.colorize(diff, black, color, blackpoint=0, whitepoint=255, midpoint=127) #convert black and white differenc image to black and color for more contrast when displaying
     #result = ImageChops.hard_light(base,diff)
-    #comp2 = comp #duplicate the comparison image to comp2
-    enhancer = ImageEnhance.Brightness(comp) #specify that we want to adjust the brightness of comp2
-    comp = enhancer.enhance(0.75) #decrease the brightness of comp2 by 25% for more contrast when displaying
-    result = ImageChops.add(diff,comp) #overlay difference ontop of comp2 and call it result
+    comp2 = comp #duplicate the comparison image to comp2
+    enhancer = ImageEnhance.Brightness(comp2) #specify that we want to adjust the brightness of comp2
+    comp2 = enhancer.enhance(0.75) #decrease the brightness of comp2 by 25% for more contrast when displaying
+
+    result = ImageChops.add(diff,comp2) #overlay difference ontop of comp2 and call it result
     pic.image = result #send results to the picture widget on the main page
-    
-    #save the output image and write to the log
     tim = time.asctime() #grab current time as to match log name and file name
     if check_size(image_path):
         result.save(image_path+tim+".jpg") #save results as a jpg with the current date and time
@@ -157,38 +126,53 @@ def capture(name):
     log.write(tim+","+str(tot)+","+str(good)+"\n") #write time, score, and pass/fail to log
     log.flush()#save it
     
-    #terminate timer and display
+    
     disp_end = time.time() #stop the timer
     disp_time = disp_end - disp_start #calculate elapsed time since display start
-    #print('Display time: {} seconds'.format(disp_time)) #display the display time
+    print('Display time: {} seconds'.format(disp_time)) #display the display time
+
+def capture(): #define code to capture images
+    global n
+    button.wait_for_release()
+    global cap_start
+    cap_start = time.time() #start image capture timer
+    
+    n = n+1 #iterate image counter
+    stream = BytesIO() #start writing camera stream to memory
+    camera.capture(stream, format='jpeg', use_video_port=True) #capture to the stream
+    stream.seek(0) #move to the first image captured
+    
+    img = Image.open(stream) #open the image
+    img = img.save(comparison_folder+'/compare_'+str(n)+'.jpg') #save the image
+    
+    cap_end = time.time() #stop the image capture time
+    cap_time = cap_end - cap_start #calculate elapsed time
+    print('Capture '+str(n)+' took: {} seconds'.format(cap_time)) #display capture number and time taken
+    
+    if n == 2: #if the image counter is two do the following:
+        n=0 #reset the image counter
+        work() #process the images
 
 
 #Button Functions-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 def reset_alarm(): #define code to reset the alarm
     print("Alarm Reset") #placeholder: print text
     app.bg = "light grey"
-    if alarm_access:alarm_reset_pin.blink(on_time=0.1,n=1) #make the alarm line "blink" for 0.1s once
-    
-def simulate_alarm(): #define the code to simulate the alarm
-    app.bg = 'tomato' #set app color to red
-    print("simulate alarm")
-    if alarm_access:alarm_pin.blink(on_time=0.1,n=1) #if alarm access is enabled make the alarm line "blink" for 0.1s once
-    
     
 def request_settings(): #define code to request the openeing of the settings page
-    keyboard("open") #open the keyboard
-    pass_win.show() #show the password window
-    pass_input.focus() #focus on the password window (user will not need to click on textbox to type password, they can just start typing)
+    keyboard("open")
+    pass_win.show()
+    pass_input.focus()
 
-def check_pass(): #define code to check of the password entered is correct
+def check_pass(): #define function to check the password entered
     password = pass_input.value
     if password == None: #if nothing is put in
         pass #do nothing, window closes
     elif password == current_password: #if the password is correct
         print("password correct!") #report into terminal
-        pass_win.hide() #conceal the password window
+        pass_win.hide()
         set_win.show() #make settings window visible
-        pass_input.value = "" #clear the password entry box
+        pass_input.value = "" #clear the password textbox
     else: #if the password is incorrect
         app.error("Warning", "Wrong Password") #create a new popup stating wrong password
 
@@ -202,13 +186,13 @@ Decision Threshold: Defines the number of pixels that are different between the 
 Contrast sensitivity: How sensitive program is to flag a pixel as different from the control. Higher means more likely.\n
 Manually Transmit: Manually run the scheduled file upload from the client(this machine) to the server.""") #create a popup with helpful text
 
-def close_settings(): #define code to close the settings window
-    sett_close = set_win.yesno("Restart?", "Restart program to send camera new settings? (Not rquired if changing rotation, sensitivity, or threshold)") #create popup to ask if user wants to restart to push new settings to camera
-    keyboard("close") #close the keyboard
+def close_settings(): #define code to clsoe the settings window
+    sett_close = set_win.yesno("Restart?", "Restart program to send camera new settings? (Not rquired if changing rotation, sensitivity, or threshold)") #create popup to ask if user wants to restart
+    keyboard("close")
     if sett_close == True: #if the answer is yes
         restart() #restart the program (maybe just migrate this out of a function if this is the only refrence)
-    else: #otherwise (if the window is closed or no is selected)
-        set_win.hide() #conceal the settings window
+    else: #otherwise
+        set_win.hide() #conceal the window
     
 #Value Change Functions-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 def change_iso(): #define code to change the iso
@@ -318,6 +302,18 @@ def change_sens(): #define code to change the sensitivity
         config_write(8,sens) #save to config file
         sens_curr_text.value = "Current Contrast Sensitivity: "+str(sens) #update window text
         sens_input.value = "" #clear the textbox
+        
+def change_sip(): #define code to change the server ip
+    try: #attempt the following
+        new_sip = str(sip_input.value) #grab input and ensure it's converted to string
+    except: #if it fails
+        app.error("Warning", "invalid input, not saving")
+    else: #otherwise
+        print("Setting Server IP to:"+new_sip) #print to terminal
+        server_ip = new_sip #update the current value
+        config_write(9,server_ip) #save to config file
+        sip_curr_text.value = "Current Server IP: "+str(server_ip) #update window text
+        sip_input.value = "" #clear the textbox
 
 def reset_pass(): #define code to change the password
     global current_password #set current password as global variable
@@ -340,8 +336,8 @@ def reset_pass(): #define code to change the password
         new_pass_input.value = ""
         conf_pass_input.value = ""
         pass_reset_win.hide() #conceal password reset window
-
-#create functions to check each box for an enter key press
+        
+#create functions to check each box for an enter press
 def iso_enter(event):
     if event.key == "\r": #check if key pressed is enter
         change_iso() #update the entry
@@ -366,6 +362,10 @@ def sens_enter(event):
     if event.key == "\r": #check if key pressed is enter
         change_sens() #update the entry
 
+def sip_enter(event):
+    if event.key == "\r": #check if key pressed is enter
+        change_sip() #update the entry
+
 def pass_reset_enter(event):
     if event.key == "\r": #check if key pressed is enter
         reset_pass() #update the entry
@@ -384,59 +384,36 @@ def check_size(dest): #create function to check if folder size is greater than m
         return True
     else:
         return False
-    
+
 def config_write(line,text): #create function to write over a line in config file (arguments:line number to write to, text/number to write)
     lines[line] = str(text)+"\n" #save new text to sepcified entry in "lines" array
     with open(config_path,'w') as f: #open the config file in write mode
         f.writelines(lines) #write the lines array to it
     
+def simulate_alarm():
+    alarm_status = True
+    app.bg = 'tomato' #set app color to red
+    print("simulate alarm")
+
 def check_button():
-    #if button.is_pressed: capture() #if button is pressed run "capture"
-    t = time.localtime() #grab the current time
-    current_time = (str(t[3])+":"+str(t[4])+":"+str(t[5])) #format it as a (hour:minute:second)
+    if button.is_pressed: capture() #if button is pressed run "capture"
     
-    if mold_open.value == 1: #if the mold open signal line is on
-        print("") #add an empty line
-        print(current_time +": mold open, checking if full") #report button status
-        capture("full") #run processing for full mold
-    elif ejector_fire.value == 1: #if the mold open signal line is on
-        print("") #add an empty line
-        print(current_time +": ejector fire, checking if empty") #report button status
-        capture("empty") #run processing for empty mold
-    elif reset_button.value == 1:
-        print("") #add an empty line
-        print(current_time +": Resetting alarm") #report button status
-        reset_alarm() #reset the alarm
-
-def toggle_alarm_access(): #define code to toggle alarm lockout
-    global alarm_access #make the access state global
-    if alarm_access == True: #if access is currently enabled
-        alarm_access = False #disable it
-        print("Disabling Alarm") #print the change
-    elif alarm_access == False: #if access is currently disabled
-        alarm_access = True #enable it
-        print("Enabling Alarm") #print the change
-    alarm_lock.text = "Alarm access is "+str(alarm_access) #update the button text with the new state
-
-def restart(): #define code to restart the program
+def restart():
     keyboard("close") #close the keyboard
     camera.close() #shutoff the camera
     app.destroy() #kill the new windows created by the programs
     os.system("\n sudo python Main_Emulated_Startup.py") #run the prgram startup script
-
-def shutdown(): #define code to shutdown the program
+    
+def shutdown():
     keyboard("close") #close the keyboard
     camera.close() #shutoff the camera
     app.destroy() #kill the new windows created by the programs
-    quit() #stop the program
+    quit()
     
 def transmit(): #define code to transmit files to server
-    #DISABLED
-    #subprocess.Popen(["python", "Main_Emulated_Transmit.py", "-sip", server_ip]) #run the transmit script
-    print("transmission disabled on this version") #print that tranmission is curently disabled
+    subprocess.Popen(["python", "Main_Emulated_Transmit.py", "-sip", server_ip]) #run the transmit script
 
-def keyboard(arg): #define code to open/close/toggle the keyboard
-    #recieved argument:"open"
+def keyboard(arg): #define code to open/close/toggle the popup keyboard   
     if arg == "open": #if the argument is asking to open the keyboard do the following
         try: #attempt the following
             prog_id = subprocess.check_output(['pidof', 'matchbox-keyboard']) #read the program id of the keyboard
@@ -446,7 +423,6 @@ def keyboard(arg): #define code to open/close/toggle the keyboard
         else: #if a the command runs fine (a program id is found)
             pass #do nothing (these two lines are technically not needed but aid comprehension)
     
-    #recieved argument:"close"
     elif arg == "close": #if the argument is asking to close the keyboard do the following
         try: #attemp the following
             prog_id = subprocess.check_output(['pidof', 'matchbox-keyboard']) #read the program id of the keyboard
@@ -457,26 +433,12 @@ def keyboard(arg): #define code to open/close/toggle the keyboard
             prog_id = str(prog_id) #convert the program id back to a string
             subprocess.run(['kill', prog_id]) #kill a program with the program id we grabbed above
     
-    #recieved argument:"toggle"
     elif arg == "toggle": #if the argument is "toggle" do the following
         subprocess.Popen(["toggle-matchbox-keyboard.sh"]) #toggle the keyboard
     
-    #recieved argument:none of the above
     else: #if an unspecified argument is entered
         print("keyboard: invalid argument") #print an error
 
-def set_control(name): #define code to set the control image as the last image analyzed (acceptable arguments:"full","empty"
-    print("resetting "+name) #print status message
-    try: #attempt to do the following
-        os.remove(comp_path+name+"_ctrl"+filetype) #delete the current control
-    except: #upon failure do the following (will fail if no image is present)
-        pass #do nothing
-    shutil.copyfile(comp_path+name+filetype,comp_path+name+"_ctrl"+filetype) #copy the current comparison image as the control
-    if name == "full": #if name is "full"
-        full_pic.image = comp_path+name+"_ctrl"+filetype #update the preview image
-    elif name == "empty": #if name is "empty"
-        empty_pic.image = comp_path+name+"_ctrl"+filetype #update the preview image
-    
 #Main Window----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 with picamera.PiCamera() as camera: #start up the camera
     #set camera settings
@@ -484,50 +446,30 @@ with picamera.PiCamera() as camera: #start up the camera
     camera.shutter_speed = ss #set shutter speed
     camera.iso = iso #set camera iso
     camera.resolution = res #set camera resolution
-    
-    #start camera stream
+    #start video stream
     stream = picamera.PiCameraCircularIO(camera, seconds=1) #generate a camera stream in which the camera retains 1 second of footage
     camera.start_recording(stream, format='h264') #start recording to the stream
-    camera.wait_recording(0.25) #allow the camera to run a second to allow it to autofocus
-    
-    #create main window
-    #app = App(title='main', layout='auto', width = 900, height = 575+50+50) #create the main application window as a small window
-    app = App(title='main', layout='auto', width = display_width, height = display_height) #create the main application window in a fullsize window
+    camera.wait_recording(0.25) #allow the camera to run a moment to allow it to autofocus
+   
+   #setup main window
+    app = App(title='main', layout='auto', width = 900, height = 575+50) #create the main application window
     app.when_closed=shutdown #when the close button is pressed on the main window, stop the program
-    
-    #control preview------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    full_preview = Window(app, title="full preview", width=800, height=550, visible=False) #create a "full" preview window
-    full_pic = Picture(full_preview, image=comp_path+"full_ctrl"+filetype) #add the current full control as an image
-    full_pic_close = PushButton(full_preview, command=full_preview.hide, text="close") #add close button
-    empty_preview = Window(app, title="empty preview", width=800, height=550, visible=False) #create an "empty" preview window
-    empty_pic = Picture(empty_preview, image=comp_path+"empty_ctrl"+filetype) #add the curent empty control as an image
-    empty_pic_close = PushButton(empty_preview, command=empty_preview.hide, text="close") #add close button
-    
-    #setup main window-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     pic = Picture(app, image="/home/pi/Desktop/Object_Detection/compare/ref.jpg", align='top') #create picture widget
-    row1 = Box(app, width=180, height=50, align='bottom') #create a container for the reset and alarm buttons. call it row1
-    reset_button = PushButton(row1, command=reset_alarm, text="Reset", align='left') #define reset button widget
-    sim_button = PushButton(row1, command=simulate_alarm, text="Simulate Alarm", align='right') #define settings button widget
-    row2 = Box(app, width=300, height=50, align='bottom') #create a container for the control set buttons, call it row2
-    ctrl_set_full = PushButton(row2, command=lambda: set_control("full"), text="Reset Full Control", align='left')
-    ctrl_set_empty = PushButton(row2, command=lambda: set_control("empty"), text="Reset Empty Control", align='right')
-    row3 = Box(app, width=320, height=50, align='bottom') #create a container for the control preview buttons, call it row3
-    empty_see = PushButton(row3, command=empty_preview.show, text="Preview Empty Control", align='right')
-    full_see = PushButton(row3, command=full_preview.show, text="Preview Full Control", align='left')
-    row4 = Box(app, width=240, height=50, align='bottom') #create a container for the control preview buttons, call it row3
-    settings_button = PushButton(row4, command=request_settings, text="Settings", align='left') #define settings button widget
-    alarm_lock = PushButton(row4, command=toggle_alarm_access, text="Alarm access is "+str(alarm_access), align='right') #define settings button widget
+    reset_button = PushButton(app, command=reset_alarm, text="Reset", align='bottom') #define reset button widget
+    settings_button = PushButton(app, command=request_settings, text="Settings", align='bottom') #define settings button widget
+    sim_button = PushButton(app, command=simulate_alarm, text="Simulate Alarm", align='bottom') #define settings button widget
     pic.repeat(1, check_button) #attach repeat widget to the picture widget to run "check_button" every 1ms
-    
-    #Password Entry Window------------------------------------------------------------------------------------------------------------------------------------------
+    #reset_button.repeat(500, check_alarm)
+
+    #Password Entry Window
     pass_win = Window(app, title="Enter Password",layout="auto", width = 300, height = 100, visible=False) #create the password reset window
     pass_input = TextBox(pass_win, align='top') #add old password textbox
     pass_button_box = Box(pass_win, width=100, height=50, align='bottom') #create a container for password window buttons
     pass_cancel = PushButton(pass_button_box, command=pass_win.hide, text="Cancel", align='right')
     pass_ok = PushButton(pass_button_box, command=check_pass, text="Ok", align='left')
+    pass_win.tk.geometry('300x100+960+560') #respecify settings window size (redundant but required) then position. The window is moved here to be out of the way of the keyboard)
     pass_input.when_key_pressed = pass_enter #if a key is pressed in the text box run the enter check
-    pass_win.tk.geometry('%dx%d+%d+%d' % (300, 100, display_width/2, display_height/2)) #respecify settings window size (redundant but required) then position. The window is moved here to be out of the way of the keyboard)
-    
+
     #Password Reset Window Setup------------------------------------------------------------------------------------------------------------------------------------------------------------
     pass_reset_win = Window(app, title="Password Reset",layout="grid", width = 300, height = 120, visible=False) #create the password reset window
     old_pass_text = Text(pass_reset_win, text="Old Password:" , grid=[1,1]) #add old password text
@@ -558,7 +500,7 @@ with picamera.PiCamera() as camera: #start up the camera
 
     #create section for setting camera mode
     cm_curr_text = Text(set_win, text="Current Shutter Mode: "+cm, grid=[1,3]) #create text widget to display current mode
-    cm_combo = Combo(set_win, options=['sports', 'off', 'auto','antishake'], grid=[2,3]) #create drop down menu widget to select new camera mode TO DO: Add more options
+    cm_combo = Combo(set_win, options=['sports', 'off', 'auto', 'night','antishake'], grid=[2,3]) #create drop down menu widget to select new camera mode TO DO: Add more options
     cm_set = PushButton(set_win, command=change_cm, text="set", grid=[4,3]) #create button widget to save mode
     cm_rec_text = Text(set_win, text="Suggested Mode: sports", grid=[5,3]) #create text widget to display recommended mode
 
@@ -590,14 +532,21 @@ with picamera.PiCamera() as camera: #start up the camera
     sens_input = TextBox(set_win, grid=[2,7])
     sens_input.when_key_pressed = sens_enter #if a key is pressed in the text box run the enter check
     sens_set = PushButton(set_win, command=change_sens, text="set", grid=[4,7])
-    sens_rec_text = Text(set_win, text="Suggested range: 3-15 (Decimal)", grid=[5,7])
+    sens_rec_text = Text(set_win, text="Suggested range: 3-15 (decimal)", grid=[5,7])
+    
+    #create secton for server ip (setup identical to ISO, see that section for line by line)
+    sip_curr_text = Text(set_win, text="Current Server IP: "+server_ip, grid=[1,8])
+    sip_input = TextBox(set_win, grid=[2,8])
+    sip_input.when_key_pressed = sip_enter #if a key is pressed in the text box run the enter check
+    sip_set = PushButton(set_win, command=change_sip, text="set", grid=[4,8])
+    sip_rec_text = Text(set_win, text="Default: 192.168.0.159", grid=[5,8])
 
     #add settings buttons
-    help_but = PushButton(set_win, command=request_setting_help, text="Help", grid=[2,8]) #create button widget for help popup
-    close_but = PushButton(set_win, command=close_settings, text="Close", grid=[3,8]) #create button widget to be able to close settings page (just executes hide command)
-    #but = PushButton(set_win, command=print("placeholder"), text="Placeholder", grid=[4,8]) #Depreceated button
-    new_pass_but = PushButton(set_win, command=pass_reset_win.show, text="Reset Password", grid=[5,8]) #create button widget to reset the password
-    transmit_but = PushButton(set_win, command=transmit, text="Manually Transmit", grid=[1,8]) #create button widget to reset the password
+    help_but = PushButton(set_win, command=request_setting_help, text="Help", grid=[2,9]) #create button widget for help popup
+    close_but = PushButton(set_win, command=close_settings, text="Close", grid=[3,9]) #create button widget to be able to close settings page (just executes hide command)
+    #placeholder_but = PushButton(set_win, command=print("placeholder"), text="placeholder", grid=[4,9]) #depreceated feature
+    new_pass_but = PushButton(set_win, command=pass_reset_win.show, text="Reset Password", grid=[5,9]) #create button widget to reset the password
+    transmit_but = PushButton(set_win, command=transmit, text="Manually Transmit", grid=[1,9]) #create button widget to reset the password
 
     #Setup Finish------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     setup_end = time.time() #stop the timer
