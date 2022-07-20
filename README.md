@@ -45,11 +45,19 @@ This is the receipt the server sends to the client. It has not contents and more
 I followed [this tutorial](https://learn.sparkfun.com/tutorials/how-to-run-a-raspberry-pi-program-on-startup/method-2-autostart) on setting up programs to run on boot with a GUI. Currently, in my system, its destination folder is /home/pi/.config/autostart. On the pi the file is called "prog" not "start" but this is likely a difference in raspbian vs windows choosing how to display as "prog" is defined in the contents of the file. In the current setup in just launches predeployment_copy.py but in the main deployment will run Main_Emulated_Startup.py.  
 
 
-# Results folder
-This is a sample output from the main program and contains the following files. Additionally, an images folder will be present here of all the images displayed in the GUI for archival.  
+# main_emulated folder
+This is a sample of all the folders that the client programs use. It shows some samples of outputs as well as demonstrates the layout of the file system. Additionally, an images folder will be present here of all the images displayed in the GUI for archival.  
 ### client_receipt.csv
 This is the csv file sent by Main_Emulated_Transmit.py to the server to tell it the file size and client ip. Additionally the server checks for this file to confirm it is recieveing files. Line one contains the image folder size in bytes, line two contains the client ip.  
 ###  log.csv
 This is the main log that tracks the decision making of main_emulated every time it does processing. This one is actually formatted and as you can see logs the timestamp which doubles as the output image title, the score the image recieved, and whether or not it set off the alarm.  
 ### startup_log.csv
 This log is written to once on every startup, it tracks the startup time and settings upon startup. This one is also formatted to it should be pretty  self explanitory when viewed in github.  
+### config.txt
+This is the config file maintained by the client programs. It stores all the setting for processing and image collection.  
+### menu_image.jpg
+This is a sample image that is used as the first image to be displayed when the client programs are launched. It stands as a placeholder until the program processes and displays a new image.  
+### images folder
+This is where the outpput images go to be stored and then sent to the server.  
+### comparison_images folder
+This is the folder in which the sample and control images are stored while the client programs run.  
