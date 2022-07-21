@@ -54,7 +54,9 @@ while True: #forever do the following
         shutil.copy(results_path+'log.csv', processing_path+'log.csv') #copy the log to the processing folder
         shutil.rmtree(processing_path+'current/') #delete old processing folder
         shutil.copytree(results_path, processing_path+'current/') #copy the results to the processing folder
-        os.rename(results_path , archive_path+time.asctime()) #move the results to the archive and timestamp it
+        day = time.asctime() #get the current date/time
+        day = day[:3] #extract the day
+        os.rename(results_path , archive_path+'/'+day+'/'+time.asctime()) #move the results to the archive and timestamp it
         quit() #close the program
         
     #what to do if the client receipt is not present yet
