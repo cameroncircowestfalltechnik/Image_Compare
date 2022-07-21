@@ -8,8 +8,8 @@ The general flow of the program is the following:
 -Startup and pull settings from config txt and write to the startup log  
 -startup the camera and wait for the button to be pressed  
   -On the first press it collects the control image  
-  -On the second press it collects the refrence image and runs processing
-  -Interprets the processing output to either throw the alarm or not
+  -On the second press it collects the refrence image and runs processing  
+  -Interprets the processing output to either throw the alarm or not  
 -Simultaneously it maintins a GUI capable of the following:  
   -Changing the camera/analysis settings behind a password protected window  
   -Save the settings to the config file  
