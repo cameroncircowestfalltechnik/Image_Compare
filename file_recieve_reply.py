@@ -5,13 +5,15 @@ import time
 import shutil
 import csv
 
-client_receipt_path = "/home/pi/Desktop/recieve/results/client_receipt.csv" #define the location of the client receipt
-server_receipt_path = "/home/pi/Desktop/recieve/server_receipt.csv" #define the location of the server receipt
-results_path = "/home/pi/Desktop/recieve/results/" #define the location where files are recieved to
-image_path = results_path+"images/" #define the location of recieved images
+main_folder = "/home/pi/Desktop/recieve"
+results_path = main_folder+"/results/"
+client_receipt_path = results_path+"/client_receipt.csv" #define the location of the client receipt
+server_receipt_path = main_folder+"/server_receipt.csv" #define the location of the server receipt
+image_path = results_path+"/images/" #define the location of recieved images
+
 processing_path = "/home/pi/Desktop/processing/" #define location of processing folder
 archive_path = "/home/pi/Desktop/archive/" #defifne location of archive folder
-server_receipt_dest = "/home/pi/Desktop/recieve" #define where in the client the server receipt should go
+server_receipt_dest = main_folder #define where in the client the server receipt should go
 
 #intialize variables
 curr_size = 0 #initialize varaible to track current image folder size
@@ -33,6 +35,7 @@ while True: #forever do the following
         size = int(size[0]) #convert from single element list to interger
         client_ip = client_ip[0] #convert from single element list to string
         #print("client ip: "+client_ip) #print the client ip
+        print("File Size: "+str(size))
         
         #wait until the recieved image folder size is the same as the client receipt says it should be
         while curr_size < size:
