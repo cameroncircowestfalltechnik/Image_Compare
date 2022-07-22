@@ -35,6 +35,9 @@ I was recently asked to deploy my system on a machine that was malfunctioning. A
   -Designed to maintain images and adapt processing for two image states.  
   -Added Gui elements to rest and view the control images as well as toggle access to alarms.  
   -File transmission to the server was removed.  
+  
+### Wiring_Check.py  
+This program is meant to check the wiring of the optocouplers and test the I/O. It presents a window that allows you to send the alarm and reset signals and displays the mold open and ejector fire signals. Additionally it writes the input signals to the termianl with a timestamp for more detail.  
 
 # Files 
 ### config.txt
