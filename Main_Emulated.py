@@ -23,14 +23,12 @@ setup_start = time.time() #start startup timer
 button = Button(4)
 
 #file path setup
-base_folder = "/home/pi/Desktop/main_emulated"
-config_path = base_folder+"/config.txt" #define config file path
-comparison_folder = base_folder+"/comparison_images"
-output_folder = base_folder+"/output"
-log_path = output_folder+"/log.csv" #specify log location
-startup_log_path = output_folder+"/startup_log.csv" #specify startup log location
-image_path = output_folder+"/images/" #specify output image path
-
+config_path = "/home/pi/Desktop/Object_Detection/compare/config.txt" #define config file path
+comp_path = "/home/pi/Desktop/Object_Detection/compare/compare_" #specify image file location
+log_path = "/home/pi/Desktop/Object_Detection/results/log.csv" #specify log location
+startup_log_path = "/home/pi/Desktop/Object_Detection/results/startup_log.csv" #specify startup log location
+image_path = "/home/pi/Desktop/Object_Detection/results/images/" #specify output image path
+comp_dir = "/home/pi/Desktop/Object_Detection/compare/compare_" #specify image file location
 
 #kill the startup program
 try: #attempt the following
@@ -75,8 +73,8 @@ startup_log.close() #close the startup log (auto saves new data)
 def work(): #define function to process images
     global cap_start #set start time as global so the total decision time can be calculated
     process_start = time.time() #start image processing timer
-    base = Image.open(comparison_folder+'/compare_1.jpg') #load control image (named "compare_1.jpg")
-    comp = Image.open(comparison_folder+'/compare_2.jpg') #load comparison image (named "compare_2.jpg")
+    base = Image.open(comp_dir+'1'+filetype) #load control image (named "compare_1.jpg")
+    comp = Image.open(comp_dir+'2'+filetype) #load comparison image (named "compare_2.jpg")
     
     #base = Image.open("/home/pi/Desktop/Object_Detection/compare2/Base.jpg") #override images
     #comp = Image.open("/home/pi/Desktop/Object_Detection/compare2/REF.jpg")
@@ -143,7 +141,7 @@ def capture(): #define code to capture images
     stream.seek(0) #move to the first image captured
     
     img = Image.open(stream) #open the image
-    img = img.save(comparison_folder+'/compare_'+str(n)+'.jpg') #save the image
+    img = img.save(comp_dir+str(n)+filetype) #save the image
     
     cap_end = time.time() #stop the image capture time
     cap_time = cap_end - cap_start #calculate elapsed time
