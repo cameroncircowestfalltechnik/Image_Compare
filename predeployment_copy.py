@@ -123,7 +123,7 @@ def capture(name):
     else: #otherwise do the following:
         print("No object detected") #say an object was not detected
         good = True #designate as good/pass
-        reset_alarm()
+        #reset_alarm()
 
     process_end = time.time() #stop the timer
     process_time = process_end - process_start #calculate elapsed time since processing start
@@ -146,7 +146,10 @@ def capture(name):
     enhancer = ImageEnhance.Brightness(comp) #specify that we want to adjust the brightness of comp2
     comp = enhancer.enhance(0.75) #decrease the brightness of comp2 by 25% for more contrast when displaying
     result = ImageChops.add(diff,comp) #overlay difference ontop of comp2 and call it result
-    pic.image = result #send results to the picture widget on the main page
+    if name == "empty":
+        pic_empty.image = result #send results to the picture widget on the main page
+    if name == "full":
+        pic_full.image = result #send results to the picture widget on the main page
     
     #save the output image and write to the log
     tim = time.asctime() #grab current time as to match log name and file name
@@ -420,9 +423,9 @@ def toggle_alarm_access(): #define code to toggle alarm lockout
 
 def restart(): #define code to restart the program
     keyboard("close") #close the keyboard
-    camera.close() #shutoff the camera
-    app.destroy() #kill the new windows created by the programs
-    os.system("\n sudo python Main_Emulated_Startup.py") #run the prgram startup script
+    #camera.close() #shutoff the camera
+    #app.destroy() #kill the new windows created by the programs
+    #os.system("\n sudo python Main_Emulated_Startup.py") #run the prgram startup script
 
 def shutdown(): #define code to shutdown the program
     keyboard("close") #close the keyboard
@@ -504,7 +507,9 @@ with picamera.PiCamera() as camera: #start up the camera
     empty_pic_close = PushButton(empty_preview, command=empty_preview.hide, text="close") #add close button
     
     #setup main window-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    pic = Picture(app, image="/home/pi/Desktop/Object_Detection/compare/ref.jpg", align='top') #create picture widget
+    row_pic = Box(app, width=1800, height=500, align='top') #create a container for the images. call it row_pic
+    pic_full = Picture(row_pic, image="/home/pi/Desktop/Object_Detection/compare/ref.jpg", align='left') #create picture widget
+    pic_empty = Picture(row_pic, image="/home/pi/Desktop/Object_Detection/compare/ref.jpg", align='right') #create picture widget
     row1 = Box(app, width=180, height=50, align='bottom') #create a container for the reset and alarm buttons. call it row1
     reset_button = PushButton(row1, command=reset_alarm, text="Reset", align='left') #define reset button widget
     sim_button = PushButton(row1, command=simulate_alarm, text="Simulate Alarm", align='right') #define settings button widget
@@ -517,7 +522,10 @@ with picamera.PiCamera() as camera: #start up the camera
     row4 = Box(app, width=240, height=50, align='bottom') #create a container for the control preview buttons, call it row3
     settings_button = PushButton(row4, command=request_settings, text="Settings", align='left') #define settings button widget
     alarm_lock = PushButton(row4, command=toggle_alarm_access, text="Alarm access is "+str(alarm_access), align='right') #define settings button widget
-    pic.repeat(1, check_button) #attach repeat widget to the picture widget to run "check_button" every 1ms
+    row0 = Box(app, width=230, height=50, align='bottom') #create a container for the reset and alarm buttons. call it row0
+    sim_eject = PushButton(row0, command=lambda: capture("empty"), text="Simulate Eject", align='right') #define settings button widget
+    sim_open = PushButton(row0, command=lambda: capture("full"), text="Simulate Open", align='left') #define settings button widget
+    pic_full.repeat(1, check_button) #attach repeat widget to the picture widget to run "check_button" every 1ms
     
     #Password Entry Window------------------------------------------------------------------------------------------------------------------------------------------
     pass_win = Window(app, title="Enter Password",layout="auto", width = 300, height = 100, visible=False) #create the password reset window
