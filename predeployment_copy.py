@@ -1,22 +1,19 @@
 # #!/usr/bin/python #uncomment to designate the program as executable
 from PIL import ImageTk
 import PIL
-from guizero import App,Text,TextBox,PushButton,Picture,question,Window,Combo,info,Box#,Image
+from guizero import App,Text,TextBox,PushButton,Picture,question,Window,Combo,info,Box,Drawing
 import time
 import tkinter as tk
 import os
 import picamera
 from io import BytesIO
 import numpy as np
-from PIL import Image
-from PIL import ImageOps
-from PIL import ImageChops
-from PIL import ImageEnhance
+from PIL import Image, ImageOps, ImageChops, ImageEnhance, ImageDraw
 import matplotlib.pyplot as plt
 import subprocess
 from gpiozero import DigitalInputDevice, DigitalOutputDevice
 import shutil
-import tkinter as tk
+#import tkinter as tk
 
 #setup-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 setup_start = time.time() #start startup timer
@@ -54,7 +51,10 @@ display_width = 1920 #define display width
 display_height = 1080 #define display height
 size_max = 500000000 #set max output folder size (currently 500MB)
 alarm_access = False #intialize Alarm lockout
-server_ip = "192.168.0.159" #specify server IP
+#server_ip = "192.168.0.159" #specify server IP
+did = [] #create empty list to store mask drawing ids (stores the ids of all drawings on the image)
+coords = [] #create empty list to store drawing coordinates
+polymode = False #intialize mask drawing mode as polygon mode off
 
 #open the log file
 log = open(log_path, "a") #open log csv file in "append mode"
@@ -97,31 +97,36 @@ def capture(name):
     
     cap_end = time.time() #stop the image capture time
     cap_time = cap_end - cap_start #calculate elapsed time
-    print('Capture "'+name+'" took: {} seconds'.format(cap_time)) #display it.
+    print('Capture "'+name+'" took: {} seconds'.format(round(cap_time,4))) #display it.
     process_start = time.time() #start image processing timer
     
-    #open the comparison image and control
+    #open the comparison image and control if no image is present to load save the current image as controland then open it
     try:
         base = Image.open(comparison_folder+"/compare_"+name+"_ctrl.jpg") #load control image
     except:
         set_control(name) #set the current base image as the control
         base = Image.open(comparison_folder+"/compare_"+name+"_ctrl.jpg") #load control image
     comp = Image.open(comparison_folder+"/compare_"+name+".jpg") #load comparison image
+    mask = Image.open(comparison_folder+"/mask.jpg")
+    mask = mask.convert("1")
     
     #find the difference
     diff = ImageChops.difference(base, comp) #find difference between images and name it diff
+    #diff = ImageChops.add(diff, mask) #find difference between images and name it diff
     diff = ImageOps.grayscale(diff) #convert the difference to black and white
     diff = diff.point( lambda p: 255 if p > 255/sens else 0) #turn any point above defined sensitivity white "255" and anything below black "0". Effectively turns grayscale to black and white.
+    diff = ImageChops.multiply(diff,mask) #introduce the masking filter
+    #diff.show()
     
     #analyze the difference and do something with the results
     tot = np.sum(np.array(diff)/255) #convert diff to an array and find the elementwise sum, call it tot for "total". This represents the quantity of pixels that are different
     print('Score: '+str(tot)) #print the "total"
     if tot > thresh: #if the total number of diffent pixels are more than the defined threshold do the following:
-        print("Object detected") #say an object was detected
+        #print("Object detected") #say an object was detected
         simulate_alarm()
         good = False #designate as not good/fail
     else: #otherwise do the following:
-        print("No object detected") #say an object was not detected
+        #print("No object detected") #say an object was not detected
         good = True #designate as good/pass
         #reset_alarm()
 
@@ -129,7 +134,7 @@ def capture(name):
     process_time = process_end - process_start #calculate elapsed time since processing start
     #print('Process time: {} seconds'.format(process_time)) #display the image processing time
     decision_time = process_end - cap_start #calculate elapsed time  since decision start
-    print('Decision time: {} seconds'.format(decision_time)) #display the decision making time
+    print('Decision Time: {} seconds'.format(round(decision_time,4))) #display the decision making time
     disp_start = time.time() #start display time timer
     
     #rotate images if needed
@@ -174,7 +179,7 @@ def reset_alarm(): #define code to reset the alarm
     
 def simulate_alarm(): #define the code to simulate the alarm
     app.bg = 'tomato' #set app color to red
-    print("simulate alarm")
+    #print("simulate alarm")
     if alarm_access:alarm_pin.blink(on_time=0.1,n=1) #if alarm access is enabled make the alarm line "blink" for 0.1s once
     
     
@@ -476,10 +481,74 @@ def set_control(name): #define code to set the control image as the last image a
         pass #do nothing
     shutil.copyfile(comp_path+name+filetype,comp_path+name+"_ctrl"+filetype) #copy the current comparison image as the control
     if name == "full": #if name is "full"
+        global pid
+        drawing.delete(pid)
+        pid = drawing.image(0,0,image=comparison_folder+"/compare_full_ctrl.jpg", width = res[0], height = res[1]) #add the image back in and save pic id to pid
         full_pic.image = comp_path+name+"_ctrl"+filetype #update the preview image
     elif name == "empty": #if name is "empty"
         empty_pic.image = comp_path+name+"_ctrl"+filetype #update the preview image
+
+#Masking Tool Functions------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+def launch_mask_tool():
+    global pid
+    drawing.delete(pid)
+    pid = drawing.image(0,0,image=comparison_folder+"/compare_full_ctrl.jpg", width = res[0], height = res[1]) #add the image back in and save pic id to pid
+    mask_win.show()
     
+def toggle_mode(): #define code to toggle polygon mode on/off
+    global polymode #make the status global
+    if polymode == True: #if polygon mode is enabled
+        polymode = False #turn it off
+        mask_polymode.text = "Mode: Rectangle" #update button text
+    else: #otherwise
+        polymode = True #turn it on
+        mask_polymode.text = "Mode: Polygon" #update button text
+
+def start(event_data): #define what to do when starting a drawing
+    global x1, y1 #make x1 and y1 global
+    x1 = event_data.x #make x1 the mouse x position
+    y1 = event_data.y #make y1 th mouse y position
+    if polymode: #if polygon mode is on
+        coords.append((x1,y1)) #add the coordinates to the coordinates array
+    
+def drag(event_data): #define what to do while dragging mouse (continually redraw a "preview" until the cursor is released)
+    global x2, y2 #make x2 and y2 global
+    x2 = event_data.x #save/update mouse x position as x2
+    y2 = event_data.y #save/update mouse y position as y2
+    if polymode: #if polygon mode is on
+        coords.append((x2,y2)) #add the coordinates to the coords array
+        tid = drawing.polygon(coords,color="light green") #create a polygon and save id to tid or "Temp ID" (this makes a polygon of the coords "dragged" so far)
+    else: #otherwise (polygon mode is off)
+        tid = drawing.rectangle(x1,y1,x2,y2, color="light green") #create box and save id to tid or "Temp ID"(this makes a box around the area selected so far)
+    #delete the last "preview"
+    if pid != (tid-1): #if the last drawing id is not the picture id
+        drawing.delete(tid-1) #delete the last drawing
+
+def finish(event_data): #define what to do when click is released
+    global did #defined drawing id list as global
+    if polymode: #if polygon mode is on
+        tid = drawing.polygon(coords,color="light green") #draw a polygon of the coords swept by cursor. temporarily save the drawing id
+        msk.polygon(coords, fill="white") #draw an identical polygon to the PIL image
+        coords.clear() #wipe the coords array
+    else: #otherwise
+        tid = drawing.rectangle(x1,y1,x2,y2,color="light green") #draw a rectangle from where the mouse was pressed to where it was released. temporarily save the id
+        msk.rectangle([(x1,y1),(x2,y2)], fill="white") #draw an identical rectangle to the PIL image
+    did.append(tid) #add the drawing id of the drawing just made to the drawing id list
+    
+def kill_last(): #define code to delete the last drawing
+    if not len(did) == 0: #if the length drawing ids is not zero (if there are drawings present to delete)
+        tid = did[-1:] #isolate the last entry
+        tid = tid[0] #convert it to interger
+        drawing.delete(tid) #kill that drawing number
+        drawing.delete(tid-1) #kill the drawing before it too (technically the final drawing overlaps an identical preview version so this line deletes th preview underneath. yes i know this is a weird/inefficient way to do it)
+        did.pop() #delete the last element from the drawing id list
+    
+def kill_all(): #define code to kill all drawings
+    global pid #make picture id global
+    did.clear() #wipe drawing id array
+    drawing.clear() #delete all drawings
+    pid = drawing.image(0,0,image=comparison_folder+"/compare_full_ctrl.jpg", width = res[0], height = res[1]) #add the image back in and save pic id to pid
+
 #Main Window----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 with picamera.PiCamera() as camera: #start up the camera
     #set camera settings
@@ -494,9 +563,10 @@ with picamera.PiCamera() as camera: #start up the camera
     camera.wait_recording(0.25) #allow the camera to run a second to allow it to autofocus
     
     #create main window
-    #app = App(title='main', layout='auto', width = 900, height = 575+50+50) #create the main application window as a small window
-    app = App(title='main', layout='auto', width = display_width, height = display_height) #create the main application window in a fullsize window
+    app = App(title='main', layout='auto', width = 1700, height = 800) #create the main application window as a small window
+    #app = App(title='Main', layout='auto', width = display_width, height = display_height) #create the main application window in a fullsize window
     app.when_closed=shutdown #when the close button is pressed on the main window, stop the program
+    mask_win = Window(app, title='Masking Tool', layout='auto', width = 900, height = 650, visible=False, bg="gray75") #create the masking tool window, make the background slight;y darker than main for contrast
     
     #control preview------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     full_preview = Window(app, title="full preview", width=800, height=550, visible=False) #create a "full" preview window
@@ -510,6 +580,9 @@ with picamera.PiCamera() as camera: #start up the camera
     row_pic = Box(app, width=1800, height=500, align='top') #create a container for the images. call it row_pic
     pic_full = Picture(row_pic, image="/home/pi/Desktop/Object_Detection/compare/ref.jpg", align='left') #create picture widget
     pic_empty = Picture(row_pic, image="/home/pi/Desktop/Object_Detection/compare/ref.jpg", align='right') #create picture widget
+    #uncomment to hide images (optimal for vnc?)
+    #pic_full.hide()
+    #pic_empty.hide()
     row1 = Box(app, width=180, height=50, align='bottom') #create a container for the reset and alarm buttons. call it row1
     reset_button = PushButton(row1, command=reset_alarm, text="Reset", align='left') #define reset button widget
     sim_button = PushButton(row1, command=simulate_alarm, text="Simulate Alarm", align='right') #define settings button widget
@@ -525,8 +598,25 @@ with picamera.PiCamera() as camera: #start up the camera
     row0 = Box(app, width=230, height=50, align='bottom') #create a container for the reset and alarm buttons. call it row0
     sim_eject = PushButton(row0, command=lambda: capture("empty"), text="Simulate Eject", align='right') #define settings button widget
     sim_open = PushButton(row0, command=lambda: capture("full"), text="Simulate Open", align='left') #define settings button widget
+    mask_button = PushButton(app, command=launch_mask_tool, text="Masking Tool", align='bottom') #define settings button widget
     pic_full.repeat(1, check_button) #attach repeat widget to the picture widget to run "check_button" every 1ms
     
+    #Setup Masking Tool Window-----------------------------------------------------------------------------------------------------------------------------------------------------
+    mask_img = Image.new("1", res) #create PIL image in mode "1" (one channel, 1 bit per pixel b&w) with the same dimensions as the capture resolution
+    msk = ImageDraw.Draw(mask_img) #make it so the image can be drawn on (create a container called msk)
+    
+    drawing = Drawing(mask_win,"fill","fill") #create drawing widget that fills the window
+    pid = drawing.image(0,0,image=comparison_folder+"/compare_full_ctrl.jpg", width = res[0], height = res[1]) #add the current control image to the drawing widget
+    mask_row1 = Box(mask_win, width=260, height=50, align='bottom') #create a container
+    mask_kill_last = PushButton(mask_row1, command=kill_last, text="Kill Last Mask", align='left') #define kill last button widget
+    mask_kill_all = PushButton(mask_row1, command=kill_all, text="Kill All Masks", align='right') #define kill all button widget
+    mask_polymode = PushButton(mask_win, command=toggle_mode, text="Mode: Rectangle", align='bottom') #define polygon mode toggle button widget
+    mask_save = PushButton(mask_win, command=lambda: mask_img.save(comparison_folder+"/mask.jpg"), text="Save Mask", align='bottom') #define button to save mask (saves PIL image as a jpg)
+    mask_close = PushButton(mask_win, command=mask_win.hide, text="Close", align='bottom') #define polygon mode toggle button widget
+
+    drawing.when_left_button_pressed = start #check for the left click to be pressed
+    drawing.when_mouse_dragged = drag #check for the mouse to drag
+    drawing.when_left_button_released = finish #checks for left click release
     #Password Entry Window------------------------------------------------------------------------------------------------------------------------------------------
     pass_win = Window(app, title="Enter Password",layout="auto", width = 300, height = 100, visible=False) #create the password reset window
     pass_input = TextBox(pass_win, align='top') #add old password textbox
@@ -613,3 +703,5 @@ with picamera.PiCamera() as camera: #start up the camera
     print('Setup time: {} seconds'.format(setup_time)) #display the setup making time
      
     app.display() #push everything
+
+
