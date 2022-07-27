@@ -55,6 +55,8 @@ alarm_access = False #intialize Alarm lockout
 did = [] #create empty list to store mask drawing ids (stores the ids of all drawings on the image)
 coords = [] #create empty list to store drawing coordinates
 polymode = False #intialize mask drawing mode as polygon mode off
+mold_open_old = 1 #intialize the mold open last status
+eject_fire_old = 1 #initialize ejector fire last status
 
 #open the log file
 log = open(log_path, "a") #open log csv file in "append mode"
@@ -158,6 +160,7 @@ def capture(name):
     
     #save the output image and write to the log
     tim = time.asctime() #grab current time as to match log name and file name
+    tim = tim[:13]+"_"+tim[14:16]+"_"+tim[17:24] #change time text format from hour:minute:second to hour_minute_second (windows filesystems dont like the ":" symbol in filenames)
     if check_size(image_path):
         result.save(image_path+tim+".jpg") #save results as a jpg with the current date and time
     else:
@@ -398,23 +401,23 @@ def config_write(line,text): #create function to write over a line in config fil
     with open(config_path,'w') as f: #open the config file in write mode
         f.writelines(lines) #write the lines array to it
     
-def check_button():
-    #if button.is_pressed: capture() #if button is pressed run "capture"
+def check_signals(): #define code to check the signals
+    global mold_open_old, eject_fire_old #import signal lasrt statuses
     t = time.localtime() #grab the current time
     current_time = (str(t[3])+":"+str(t[4])+":"+str(t[5])) #format it as a (hour:minute:second)
     
-    if mold_open.value == 1: #if the mold open signal line is on
+    if (mold_open.value == 1) and (mold_open_old == 0): #if the mold open signal line is on and the last time we checked it was off
         print("") #add an empty line
-        print(current_time +": mold open, checking if full") #report button status
+        print(current_time +": mold open, checking if full") #report signal status
         capture("full") #run processing for full mold
-    elif ejector_fire.value == 1: #if the mold open signal line is on
+    mold_open_old = mold_open.value #update mold open last status
+    
+    if (ejector_fire.value == 1) and (eject_fire_old == 0): #if the mold open signal line is on and the last time we checked it was off
         print("") #add an empty line
-        print(current_time +": ejector fire, checking if empty") #report button status
+        print(current_time +": ejector fire, checking if empty") #report signal status
+        time.sleep(0.2) #wait 200ms for parts to fall out of frame. TO DO: drive via settings
         capture("empty") #run processing for empty mold
-    elif reset_button.value == 1:
-        print("") #add an empty line
-        print(current_time +": Resetting alarm") #report button status
-        reset_alarm() #reset the alarm
+    eject_fire_old = ejector_fire.value #update ejector fire last status
 
 def toggle_alarm_access(): #define code to toggle alarm lockout
     global alarm_access #make the access state global
@@ -563,8 +566,8 @@ with picamera.PiCamera() as camera: #start up the camera
     camera.wait_recording(0.25) #allow the camera to run a second to allow it to autofocus
     
     #create main window
-    app = App(title='main', layout='auto', width = 1700, height = 800) #create the main application window as a small window
-    #app = App(title='Main', layout='auto', width = display_width, height = display_height) #create the main application window in a fullsize window
+    #app = App(title='main', layout='auto', width = 1700, height = 800) #create the main application window as a small window
+    app = App(title='Main', layout='auto', width = display_width, height = display_height) #create the main application window in a fullsize window
     app.when_closed=shutdown #when the close button is pressed on the main window, stop the program
     mask_win = Window(app, title='Masking Tool', layout='auto', width = 900, height = 650, visible=False, bg="gray75") #create the masking tool window, make the background slight;y darker than main for contrast
     
@@ -578,8 +581,8 @@ with picamera.PiCamera() as camera: #start up the camera
     
     #setup main window-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     row_pic = Box(app, width=1800, height=500, align='top') #create a container for the images. call it row_pic
-    pic_full = Picture(row_pic, image="/home/pi/Desktop/Object_Detection/compare/ref.jpg", align='left') #create picture widget
-    pic_empty = Picture(row_pic, image="/home/pi/Desktop/Object_Detection/compare/ref.jpg", align='right') #create picture widget
+    pic_full = Picture(row_pic, image="/home/pi/Desktop/Object_Detection/compare/ref.jpg", align='left') #create picture widget to show the mold open image
+    pic_empty = Picture(row_pic, image="/home/pi/Desktop/Object_Detection/compare/ref.jpg", align='right') #create picture widget to show the ejector fire image
     #uncomment to hide images (optimal for vnc?)
     #pic_full.hide()
     #pic_empty.hide()
@@ -599,7 +602,7 @@ with picamera.PiCamera() as camera: #start up the camera
     sim_eject = PushButton(row0, command=lambda: capture("empty"), text="Simulate Eject", align='right') #define settings button widget
     sim_open = PushButton(row0, command=lambda: capture("full"), text="Simulate Open", align='left') #define settings button widget
     mask_button = PushButton(app, command=launch_mask_tool, text="Masking Tool", align='bottom') #define settings button widget
-    pic_full.repeat(1, check_button) #attach repeat widget to the picture widget to run "check_button" every 1ms
+    pic_full.repeat(1, check_signals) #attach repeat widget to the picture widget to run "check_signals" every 1ms
     
     #Setup Masking Tool Window-----------------------------------------------------------------------------------------------------------------------------------------------------
     mask_img = Image.new("1", res) #create PIL image in mode "1" (one channel, 1 bit per pixel b&w) with the same dimensions as the capture resolution
