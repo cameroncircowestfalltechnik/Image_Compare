@@ -49,7 +49,7 @@ res_max = (3280, 2464) #define the max camera resolution
 #manually define display dimensions (maybe switch this to autodetect later)
 display_width = 1920 #define display width
 display_height = 1080 #define display height
-size_max = 500000000 #set max output folder size (currently 500MB)
+size_max = 5000000000 #set max output folder size (currently 5 GB)
 alarm_access = False #intialize Alarm lockout
 #server_ip = "192.168.0.159" #specify server IP
 did = [] #create empty list to store mask drawing ids (stores the ids of all drawings on the image)
@@ -57,6 +57,19 @@ coords = [] #create empty list to store drawing coordinates
 polymode = False #intialize mask drawing mode as polygon mode off
 mold_open_old = 1 #intialize the mold open last status
 eject_fire_old = 1 #initialize ejector fire last status
+full_score = None #intialize full score
+full_pass = None #initialize full pass/fail
+
+#define colors for colorizing difference image
+black = (0,0,0) #define black pixel rgb value
+color = (0,255,0) #define colored pixel rgb value (in this case it's currently green)
+
+#load the image mask
+mask = Image.open(comparison_folder+"/mask.jpg") #load image mask
+mask = mask.convert("1") #convert it to mode "1" (1 or 0 value for each pixel ie. B&W one channel binary)
+#load the control images
+full_ctrl = Image.open(comparison_folder+"/compare_full_ctrl.jpg") #load full control
+empty_ctrl = Image.open(comparison_folder+"/compare_empty_ctrl.jpg") #load empty control
 
 #open the log file
 log = open(log_path, "a") #open log csv file in "append mode"
@@ -84,41 +97,32 @@ startup_log.close() #close the startup log (auto saves new data)
 #The Camera Zone------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #capture and process the image
 def capture(name):
-    global cap_start
+    global full_score, full_pass, full_ctrl_candidate, empty_ctrl_candidate
     cap_start = time.time() #start image capture timer
     
     #take picture
-    stream = BytesIO() #start writing camera stream to memory
-    camera.capture(stream, format='jpeg', use_video_port=True) #capture to the stream
+    stream = BytesIO() #create memory buffer to write images to
+    camera.capture(stream, format='jpeg', use_video_port=True) #capture to the buffer
     stream.seek(0) #move to the first image captured
+    comp = Image.open(stream) #write the image to the PIL object "comp" or comparison
     
-    #save the picture
-    img = Image.open(stream) #open the image
-    #img = img.save(comp_path+name+filetype) #save the image
-    img = img.save(comparison_folder+"/compare_"+name+".jpg") #save the image
-    
+    #finish timer
     cap_end = time.time() #stop the image capture time
     cap_time = cap_end - cap_start #calculate elapsed time
     print('Capture "'+name+'" took: {} seconds'.format(round(cap_time,4))) #display it.
     process_start = time.time() #start image processing timer
     
-    #open the comparison image and control if no image is present to load save the current image as controland then open it
-    try:
-        base = Image.open(comparison_folder+"/compare_"+name+"_ctrl.jpg") #load control image
-    except:
-        set_control(name) #set the current base image as the control
-        base = Image.open(comparison_folder+"/compare_"+name+"_ctrl.jpg") #load control image
-    comp = Image.open(comparison_folder+"/compare_"+name+".jpg") #load comparison image
-    mask = Image.open(comparison_folder+"/mask.jpg")
-    mask = mask.convert("1")
+    #set the correct control image (ie. we are storing the respective controls as PIL images and we write to the "main" control named "control" based on which image we are capturing)
+    if name == "full": #if the arg is "full"
+        control = full_ctrl #set the main control to the full control
+    elif name == "empty": #if the arg is empty
+        control = empty_ctrl #set the main control to the empty control
     
-    #find the difference
-    diff = ImageChops.difference(base, comp) #find difference between images and name it diff
-    #diff = ImageChops.add(diff, mask) #find difference between images and name it diff
+    #find the difference in the images and apply the image mask
+    diff = ImageChops.difference(control, comp) #find difference between images and name it "diff" or difference
     diff = ImageOps.grayscale(diff) #convert the difference to black and white
+    diff = ImageChops.multiply(diff,mask) #introduce the masking filter (ie. any pixel location where the masking filter is white, the diff image is allowed to pass. Any pixel location where the masking filter is black, the diff image is turned black )
     diff = diff.point( lambda p: 255 if p > 255/sens else 0) #turn any point above defined sensitivity white "255" and anything below black "0". Effectively turns grayscale to black and white.
-    diff = ImageChops.multiply(diff,mask) #introduce the masking filter
-    #diff.show()
     
     #analyze the difference and do something with the results
     tot = np.sum(np.array(diff)/255) #convert diff to an array and find the elementwise sum, call it tot for "total". This represents the quantity of pixels that are different
@@ -138,22 +142,31 @@ def capture(name):
     decision_time = process_end - cap_start #calculate elapsed time  since decision start
     print('Decision Time: {} seconds'.format(round(decision_time,4))) #display the decision making time
     disp_start = time.time() #start display time timer
-    
-    #rotate images if needed
-    base = base.rotate(rot) #rotate the control image if needed
-    comp = comp.rotate(rot) #rotate the comparison image if needed
-    diff = diff.rotate(rot) #rotate the difference image if needed
 
     #generate the output image
-    black = (0,0,0) #define black pixel rgb value
-    color = (0,255,0) #define colored pixel rgb value (in this case it's currently green)
+
     diff = ImageOps.colorize(diff, black, color, blackpoint=0, whitepoint=255, midpoint=127) #convert black and white differenc image to black and color for more contrast when displaying
-    #result = ImageChops.hard_light(base,diff)
-    #comp2 = comp #duplicate the comparison image to comp2
-    enhancer = ImageEnhance.Brightness(comp) #specify that we want to adjust the brightness of comp2
+    enhancer = ImageEnhance.Brightness(comp) #specify that we want to adjust the brightness of comp
     comp = enhancer.enhance(0.75) #decrease the brightness of comp2 by 25% for more contrast when displaying
     result = ImageChops.add(diff,comp) #overlay difference ontop of comp2 and call it result
-    if name == "empty":
+    
+    #rotate image if needed (if camera is mounted sideways or upsidedown)
+    result = result.rotate(rot)
+    
+    if name == "full":
+        pic_full.image = result #send results to the picture widget on the main page
+        tim = time.asctime() #grab current time as to match log name and file name
+        tim = tim[:13]+"_"+tim[14:16]+"_"+tim[17:24] #change time text format from hour:minute:second to hour_minute_second (windows filesystems dont like the ":" symbol in filenames)
+        if check_size(image_path):
+            result.save(image_path+tim+"_2.jpg") #save results as a jpg with the current date and time
+        else:
+            print("output folder full, not saving image")
+        #save output to add to log in a moment
+        full_score = tot #save the score
+        full_pass = good #save the pass/fail
+        full_ctrl_candidate = comp
+    
+    elif name == "empty":
         pic_empty.image = result #send results to the picture widget on the main page
         
         tim = time.asctime() #grab current time as to match log name and file name
@@ -162,16 +175,11 @@ def capture(name):
             result.save(image_path+tim+"_1.jpg") #save results as a jpg with the current date and time
         else:
             print("output folder full, not saving image")
-    elif name == "full":
-        pic_full.image = result #send results to the picture widget on the main page
-        tim = time.asctime() #grab current time as to match log name and file name
-        tim = tim[:13]+"_"+tim[14:16]+"_"+tim[17:24] #change time text format from hour:minute:second to hour_minute_second (windows filesystems dont like the ":" symbol in filenames)
-        if check_size(image_path):
-            result.save(image_path+tim+"_2.jpg") #save results as a jpg with the current date and time
-        else:
-            print("output folder full, not saving image")
-    log.write(tim+","+str(tot)+","+str(good)+"\n") #write time, score, and pass/fail to log
-    log.flush()#save it
+        empty_ctrl_candidate = comp
+            
+        #write the the data from empty and close to a line in the log (run at the end of ejector fire as that will ALWAYS happen after mold open)
+        log.write(tim+","+str(full_score)+","+str(full_pass)+","+str(tot)+","+str(good)+"\n") #write time, score, and pass/fail to log
+        log.flush()#save it
     
     #terminate timer and display
     disp_end = time.time() #stop the timer
@@ -481,27 +489,32 @@ def keyboard(arg): #define code to open/close/toggle the keyboard
     else: #if an unspecified argument is entered
         print("keyboard: invalid argument") #print an error
 
-def set_control(name): #define code to set the control image as the last image analyzed (acceptable arguments:"full","empty"
+def set_control(name): #define code to set the control image as the last image analyzed (acceptable arguments:"full","empty") 
+    global full_ctrl, empty_ctrl #make full_ctrl and empty_ctrl global so they can be written to
     print("resetting "+name) #print status message
     try: #attempt to do the following
         os.remove(comp_path+name+"_ctrl"+filetype) #delete the current control
     except: #upon failure do the following (will fail if no image is present)
         pass #do nothing
-    shutil.copyfile(comp_path+name+filetype,comp_path+name+"_ctrl"+filetype) #copy the current comparison image as the control
+    #save the control candidate as the control jpg and update windows containing the control images
     if name == "full": #if name is "full"
+        full_ctrl_candidate.save(comparison_folder+"/compare_"+name+"_ctrl.jpg") #save the full control candidate
+        full_ctrl = full_ctrl_candidate #write over the current control with the candidate
         global pid
-        drawing.delete(pid)
-        pid = drawing.image(0,0,image=comparison_folder+"/compare_full_ctrl.jpg", width = res[0], height = res[1]) #add the image back in and save pic id to pid
+        drawing.delete(pid) #delete the masking window copy of the full control
+        pid = drawing.image(0,0,image=comparison_folder+"/compare_full_ctrl.jpg", width = res[0], height = res[1]) #update the masking window image with the new control
         full_pic.image = comp_path+name+"_ctrl"+filetype #update the preview image
     elif name == "empty": #if name is "empty"
+        empty_ctrl_candidate.save(comparison_folder+"/compare_"+name+"_ctrl.jpg") #save the empty control candidate
         empty_pic.image = comp_path+name+"_ctrl"+filetype #update the preview image
+        empty_ctrl = empty_ctrl_candidate #write over the current control with the candidate
 
 #Masking Tool Functions------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-def launch_mask_tool():
-    global pid
-    drawing.delete(pid)
+def launch_mask_tool(): #define code to launch masking tool window
+    global pid #make picture id global
+    drawing.delete(pid) #delete the current image in the window
     pid = drawing.image(0,0,image=comparison_folder+"/compare_full_ctrl.jpg", width = res[0], height = res[1]) #add the image back in and save pic id to pid
-    mask_win.show()
+    mask_win.show() #make the mask tool window visible
     
 def toggle_mode(): #define code to toggle polygon mode on/off
     global polymode #make the status global
@@ -711,5 +724,7 @@ with picamera.PiCamera() as camera: #start up the camera
     print('Setup time: {} seconds'.format(setup_time)) #display the setup making time
      
     app.display() #push everything
+
+
 
 
