@@ -155,16 +155,21 @@ def capture(name):
     result = ImageChops.add(diff,comp) #overlay difference ontop of comp2 and call it result
     if name == "empty":
         pic_empty.image = result #send results to the picture widget on the main page
-    if name == "full":
+        
+        tim = time.asctime() #grab current time as to match log name and file name
+        tim = tim[:13]+"_"+tim[14:16]+"_"+tim[17:24] #change time text format from hour:minute:second to hour_minute_second (windows filesystems dont like the ":" symbol in filenames)
+        if check_size(image_path):
+            result.save(image_path+tim+"_1.jpg") #save results as a jpg with the current date and time
+        else:
+            print("output folder full, not saving image")
+    elif name == "full":
         pic_full.image = result #send results to the picture widget on the main page
-    
-    #save the output image and write to the log
-    tim = time.asctime() #grab current time as to match log name and file name
-    tim = tim[:13]+"_"+tim[14:16]+"_"+tim[17:24] #change time text format from hour:minute:second to hour_minute_second (windows filesystems dont like the ":" symbol in filenames)
-    if check_size(image_path):
-        result.save(image_path+tim+".jpg") #save results as a jpg with the current date and time
-    else:
-        print("output folder full, not saving image")
+        tim = time.asctime() #grab current time as to match log name and file name
+        tim = tim[:13]+"_"+tim[14:16]+"_"+tim[17:24] #change time text format from hour:minute:second to hour_minute_second (windows filesystems dont like the ":" symbol in filenames)
+        if check_size(image_path):
+            result.save(image_path+tim+"_2.jpg") #save results as a jpg with the current date and time
+        else:
+            print("output folder full, not saving image")
     log.write(tim+","+str(tot)+","+str(good)+"\n") #write time, score, and pass/fail to log
     log.flush()#save it
     
@@ -402,7 +407,7 @@ def config_write(line,text): #create function to write over a line in config fil
         f.writelines(lines) #write the lines array to it
     
 def check_signals(): #define code to check the signals
-    global mold_open_old, eject_fire_old #import signal lasrt statuses
+    global mold_open_old, eject_fire_old #import signal last statuses
     t = time.localtime() #grab the current time
     current_time = (str(t[3])+":"+str(t[4])+":"+str(t[5])) #format it as a (hour:minute:second)
     
