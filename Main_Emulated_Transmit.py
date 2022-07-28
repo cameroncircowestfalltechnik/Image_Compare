@@ -6,11 +6,12 @@ import csv
 import argparse
 
 #define file paths/defaults
-source_path = "/home/pi/Desktop/Object_Detection/results/" #defien path to send
+base_folder = "/home/pi/Desktop/main_emulated"
+source_path = base_folder+"/output/" #define path to send
 destination_path = "/home/pi/Desktop/recieve" #define where to send to 
 server_ip = "192.168.0.159" #define who to send to (default)
 image_path = source_path+"images/" #define image folder location
-client_receipt_path = "/home/pi/Desktop/Object_Detection/results/client_receipt.csv"
+client_receipt_path = source_path+"/client_receipt.csv"
 server_receipt_path = "/home/pi/Desktop/recieve/server_receipt.csv" #define receipt location
 
 #define arguments

@@ -6,7 +6,7 @@ import shutil
 import csv
 
 main_folder = "/home/pi/Desktop/recieve"
-results_path = main_folder+"/results/"
+results_path = main_folder+"/output/"
 client_receipt_path = results_path+"/client_receipt.csv" #define the location of the client receipt
 server_receipt_path = main_folder+"/server_receipt.csv" #define the location of the server receipt
 image_path = results_path+"/images/" #define the location of recieved images
@@ -51,6 +51,7 @@ while True: #forever do the following
         subprocess.run(["scp",server_receipt_path, "pi@"+client_ip+":"+server_receipt_dest]) #send server reciept
         
         #save files to desired locations
+        #quit() #debug
         shutil.copy(results_path+'log.csv', processing_path+'log.csv') #copy the log to the processing folder
         shutil.rmtree(processing_path+'current/') #delete old processing folder
         shutil.copytree(results_path, processing_path+'current/') #copy the results to the processing folder
