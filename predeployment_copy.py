@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import subprocess
 from gpiozero import DigitalInputDevice, DigitalOutputDevice
 import shutil
-#import tkinter as tk
+
 
 #setup-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 setup_start = time.time() #start startup timer
@@ -32,6 +32,7 @@ output_folder = base_folder+"/output"
 log_path = output_folder+"/log.csv" #specify log location
 startup_log_path = output_folder+"/startup_log.csv" #specify startup log location
 image_path = output_folder+"/images/" #specify output image path
+mask_archive = output_folder+"/mask_archive/"
 comp_path = comparison_folder+"/compare_" #specify image file location
 
 #kill the startup program
@@ -61,18 +62,29 @@ eject_fire_old = 1 #initialize ejector fire last status
 full_score = None #intialize full score
 full_pass = None #initialize full pass/fail
 max_score = None
-tim = None #intitizlize current time variable for capture sequence
+x1, y1 = None, None
+tim = time.asctime() #intitizlize current time variable for capture sequence and to save the image mask
+tim = tim[:13]+"_"+tim[14:16]+"_"+tim[17:24] #change time text format from hour:minute:second to hour_minute_second (windows filesystems dont like the ":" symbol in filenames)
 
 #define colors for colorizing difference image
 black = (0,0,0) #define black pixel rgb value
 color = (0,255,0) #define colored pixel rgb value (in this case it's currently green)
 
-#load the image mask
-mask = Image.open(comparison_folder+"/mask.jpg") #load image mask
-mask = mask.convert("1") #convert it to mode "1" (1 or 0 value for each pixel ie. B&W one channel binary)
 #load the control images
 full_ctrl = Image.open(comparison_folder+"/compare_full_ctrl.jpg") #load full control
 empty_ctrl = Image.open(comparison_folder+"/compare_empty_ctrl.jpg") #load empty control
+full_ctrl_candidate = full_ctrl #intialize full control  candidate (this way if the user attempts to reset the control before a candidate is set it doesn' break)
+empty_ctrl_candidate = empty_ctrl #intialize empty control candidate
+
+#load the image mask preview
+mask = Image.open(comparison_folder+"/mask.jpg") #load image mask
+mask_color = ImageOps.colorize(mask, black, color, blackpoint=0, whitepoint=255, midpoint=127) #convert from black and white to rgb
+enhancer = ImageEnhance.Brightness(mask_color) #specify that we want to adjust the brightness of the mask
+mask_color = enhancer.enhance(0.5) #decrease the brightness by 50% as to not obstruct the parts in the image
+current_mask = ImageChops.add(mask_color,full_ctrl) #superimpose the images
+current_mask.save(output_folder+"/mask.jpg") #write over the currently archived mask preview
+
+mask = mask.convert("1") #convert it to mode "1" (1 or 0 value for each pixel ie. B&W one channel binary) for use as the filter
 
 #open the log file
 log = open(log_path, "a") #open log csv file in "append mode"
@@ -123,10 +135,10 @@ def capture(name): #possible inputs "full" "empty" "test"
     #set the correct control image (ie. we are storing the respective controls as PIL images and we write to the "main" control named "control" based on which image we are capturing)
     if name == "full": #if the arg is "full"
         control = full_ctrl #set the main control to the full control
-        comp = Image.open(comparison_folder+"/compare_full_edit.jpg") #manually overwrite image to load
+        comp = Image.open(comparison_folder+"/compare_full_edit2.jpg") #manually overwrite image to load
     elif name == "empty": #if the arg is empty
         control = empty_ctrl #set the main control to the empty control
-        comp = Image.open(comparison_folder+"/compare_empty_edit.jpg") #manually overwrite image to load
+        comp = Image.open(comparison_folder+"/compare_empty_edit2.jpg") #manually overwrite image to load
     elif name == "test":
         control = full_ctrl #set the main control to the full control
         comp = empty_ctrl
@@ -137,6 +149,8 @@ def capture(name): #possible inputs "full" "empty" "test"
     diff = ImageChops.multiply(diff,mask) #introduce the masking filter (ie. any pixel location where the masking filter is white, the diff image is allowed to pass. Any pixel location where the masking filter is black, the diff image is turned black )
     #diff = diff.point( lambda p: 255 if p > 255/sens else 0) #turn any point above defined sensitivity white "255" and anything below black "0". Effectively turns grayscale to black and white.
     diff = diff.filter(ImageFilter.BoxBlur(4))
+    enhancer = ImageEnhance.Contrast(diff)
+    diff = enhancer.enhance(1.5)
     diff = diff.point( lambda p: 255 if p > 255/sens else 0)
     
     #analyze the difference and do something with the results
@@ -208,7 +222,7 @@ def capture(name): #possible inputs "full" "empty" "test"
     elif name == "test":
         print("Max Score: "+str(tot))
         max_score = int(tot)
-        result.show()
+        show_current_mask()
         config_write(12,max_score) #save to config file
     elif name == "empty misfire":
         pic_empty.image = result #send results to the picture widget on the main page
@@ -238,7 +252,7 @@ def check_pass(): #define code to check of the password entered is correct
         set_win.show() #make settings window visible
         pass_input.value = "" #clear the password entry box
     else: #if the password is incorrect
-        app.error("Warning", "Wrong Password") #create a new popup stating wrong password
+        pass_win.error("Warning", "Wrong Password") #create a new popup stating wrong password
         pass_input.value = "" #clear the password entry box
         
 def cancel_pass(): #define what to do when password cancel button or window close is pressed
@@ -296,7 +310,7 @@ def change_iso(): #define code to change the iso
         iso_curr_text.value = "Current ISO: "+str(iso) #update the settings page text
         iso_input.value = "" #clear the textbox
     else: #if the input is not a number
-        app.error("Warning", "invalid input, not saving") #create a popup error
+        set_win.error("Warning", "invalid input, not saving") #create a popup error
         
 def change_ss(): #define code to change the shutter speed (operates identical to change_iso, see that for line by line)
     new_ss = ss_input.value
@@ -310,7 +324,7 @@ def change_ss(): #define code to change the shutter speed (operates identical to
         ss_curr_text.value = "Current Shutter Speed: "+str(ss)
         ss_input.value = "" #clear the textbox
     else:
-        app.error("Warning", "invalid input, not saving")
+        set_win.error("Warning", "invalid input, not saving")
         
 def change_cm(): #define code to change camera mode
     cm = cm_combo.value #write the input to the camera mode variable
@@ -330,7 +344,7 @@ def change_rot(): #define code to change the image rotation (operates identical 
         rot_curr_text.value = "Current Image Rotation: "+str(rot)
         rot_input.value = "" #clear the textbox
     else:
-        app.error("Warning", "invalid input, not saving")
+        set_win.error("Warning", "invalid input, not saving")
 
 def change_res(): #define code to change image resolution
     global res #define resolutiion tuple as global
@@ -342,9 +356,9 @@ def change_res(): #define code to change image resolution
     if new_resw == None: #if no width is input
         pass #do nothing
     elif numericw == False: #if the input is non numeric
-        app.error("Warning", "invalid width input, not saving") #create a popup error
+        set_win.error("Warning", "invalid width input, not saving") #create a popup error
     elif int(new_resw) > res_max[0]: #if the new width is higher than the max
-        app.error("Warning", "width higher than camera can capture, not saving") #create a popup error
+        set_win.error("Warning", "width higher than camera can capture, not saving") #create a popup error
     elif numericw == True: #if the input is numeric
         print("Setting Camera image width to:"+str(new_resw)) #print to terminal
         res[0] = int(new_resw) #assign new width to its list position
@@ -354,9 +368,9 @@ def change_res(): #define code to change image resolution
     if new_resh == None: #if no height is input
         pass #do nothing
     elif numerich == False: #if the input is non numeric
-        app.error("Warning", "invalid height input, not saving") #create a popup error
+        set_win.error("Warning", "invalid height input, not saving") #create a popup error
     elif int(new_resh) > res_max[1]: #if the new height is higher than the max
-        app.error("Warning", "Height higher than camera can capture, not saving") #create popup error
+        set_win.error("Warning", "Height higher than camera can capture, not saving") #create popup error
     elif numerich == True: #if the input is numeric
         print("Setting Camera image height to:"+str(new_resh)) #print to terminal
         res[1] = int(new_resh) #assign new height to its list position
@@ -378,13 +392,13 @@ def change_thresh(): #define code to change the threshold (operates identical to
         thresh_curr_text.value = "Current Decision Threshold: "+str(thresh)
         thresh_input.value = "" #clear the textbox
     else:
-        app.error("Warning", "invalid input, not saving")
+        set_win.error("Warning", "invalid input, not saving")
 
 def change_sens(): #define code to change the sensitivity
     try: #attempt the following
         new_sens = float(sens_input.value) #convert input to float
     except: #if it fails (input is non numeric)
-        app.error("Warning", "invalid input, not saving")
+        set_win.error("Warning", "invalid input, not saving")
     else: #otherwise (input IS numeric)
         print("Setting Contrast Sensitivity to:"+str(new_sens)) #print to terminal
         sens = new_sens #update the current value
@@ -396,7 +410,7 @@ def change_open_delay(): #define code to change the sensitivity
     try: #attempt the following
         new_open_delay = float(open_delay_input.value) #convert input to float
     except: #if it fails (input is non numeric)
-        app.error("Warning", "invalid input, not saving")
+        set_win.error("Warning", "invalid input, not saving")
     else: #otherwise (input IS numeric)
         print("Setting mold open capture delay to:"+str(new_open_delay)) #print to terminal
         open_delay = new_open_delay #update the current value
@@ -408,7 +422,7 @@ def change_eject_delay(): #define code to change the sensitivity
     try: #attempt the following
         new_eject_delay = float(eject_delay_input.value) #convert input to float
     except: #if it fails (input is non numeric)
-        app.error("Warning", "invalid input, not saving")
+        set_win.error("Warning", "invalid input, not saving")
     else: #otherwise (input IS numeric)
         print("Setting eject fire capture delay to:"+str(new_sens)) #print to terminal
         eject_delay = new_eject_delay #update the current value
@@ -420,7 +434,7 @@ def change_sip(): #define code to change the server ip
     try: #attempt the following
         new_sip = str(sip_input.value) #grab input and ensure it's converted to string
     except: #if it fails
-        app.error("Warning", "invalid input, not saving")
+        set_win.error("Warning", "invalid input, not saving")
     else: #otherwise
         print("Setting Server IP to:"+new_sip) #print to terminal
         server_ip = new_sip #update the current value
@@ -616,6 +630,14 @@ def set_control(name): #define code to set the control image as the last image a
         empty_pic.image = comp_path+name+"_ctrl"+filetype #update the preview image
         empty_ctrl = empty_ctrl_candidate #write over the current control with the candidate
 
+def refresh_mask_preview(): #define code to generate and save the mask preview for use in the mask tool and archive
+    mask = Image.open(comparison_folder+"/mask.jpg") #load image mask (yes this is necessary)
+    mask_color = ImageOps.colorize(mask, black, color, blackpoint=0, whitepoint=255, midpoint=127) #convert from black and white to rgb
+    enhancer = ImageEnhance.Brightness(mask_color) #specify that we want to adjust the brightness of the mask
+    mask_color = enhancer.enhance(0.5) #decrease the brightness by 50% as to not obstruct the parts in the image
+    current_mask = ImageChops.add(mask_color,full_ctrl) #superimpose the images
+    current_mask.save(output_folder+"/mask_preview.jpg") #write over the currently archived mask preview
+    
 #Masking Tool Functions------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 def launch_mask_tool(): #define code to launch masking tool window
     global pid #make picture id global
@@ -640,9 +662,13 @@ def start(event_data): #define what to do when starting a drawing
         coords.append((x1,y1)) #add the coordinates to the coordinates array
     
 def drag(event_data): #define what to do while dragging mouse (continually redraw a "preview" until the cursor is released)
-    global x2, y2 #make x2 and y2 global
+    global x1, y1, x2, y2 #make x2 and y2 global
     x2 = event_data.x #save/update mouse x position as x2
     y2 = event_data.y #save/update mouse y position as y2
+    
+    if x1 == None: #if x1 and y1 have not yet been defined
+        x1,y1 = x2,y2 #duplicate x2 and y2 to them
+        
     if polymode: #if polygon mode is on
         coords.append((x2,y2)) #add the coordinates to the coords array
         tid = drawing.polygon(coords,color="light green") #create a polygon and save id to tid or "Temp ID" (this makes a polygon of the coords "dragged" so far)
@@ -653,7 +679,8 @@ def drag(event_data): #define what to do while dragging mouse (continually redra
         drawing.delete(tid-1) #delete the last drawing
 
 def finish(event_data): #define what to do when click is released
-    global did #defined drawing id list as global
+    global x1, y1, did #defined drawing id list as global
+
     if polymode: #if polygon mode is on
         tid = drawing.polygon(coords,color="light green") #draw a polygon of the coords swept by cursor. temporarily save the drawing id
         msk.polygon(coords, fill="white") #draw an identical polygon to the PIL image
@@ -662,6 +689,7 @@ def finish(event_data): #define what to do when click is released
         tid = drawing.rectangle(x1,y1,x2,y2,color="light green") #draw a rectangle from where the mouse was pressed to where it was released. temporarily save the id
         msk.rectangle([(x1,y1),(x2,y2)], fill="white") #draw an identical rectangle to the PIL image
     did.append(tid) #add the drawing id of the drawing just made to the drawing id list
+    x1,y1 = None,None #Wipe the original coords
     
 def kill_last(): #define code to delete the last drawing
     if not len(did) == 0: #if the length drawing ids is not zero (if there are drawings present to delete)
@@ -678,15 +706,16 @@ def kill_all(): #define code to kill all drawings
     pid = drawing.image(0,0,image=comparison_folder+"/compare_full_ctrl.jpg", width = res[0], height = res[1]) #add the image back in and save pic id to pid
 
 def show_current_mask(): #define the code for displaying the current mask
-    mask_raw = Image.open(comparison_folder+"/mask.jpg") #load image mask
-    mask_raw = ImageOps.colorize(mask_raw, black, color, blackpoint=0, whitepoint=255, midpoint=127) #convert from black and white to rgb
-    enhancer = ImageEnhance.Brightness(mask_raw) #specify that we want to adjust the brightness of the mask
-    mask_raw = enhancer.enhance(0.5) #decrease the brightness by 50% as to not obstruct the parts in the image
-    old_mask = ImageChops.add(mask_raw,full_ctrl) #superimpose the images
-    old_mask.show() #display the current mask in a new window
+    mask_preview.hide() #hide the window (if already hidden nothing will happen)
+    mask_preview.show() #show the window (this also brings it to the top)
 
 def request_mask_help(): #define what to do when help is requested in the masking tool window
     help_info = set_win.info("Help", "Use this window to drag a box or polygon around the region to examine. Areas covered in green will be processed. Use kill last mask to delete the last drawng or the kill all masks button to dleete all of them and start over. Press the mode button to toggle between rectanlge mode and polygon mode. Dont forget to save the mask before closing. Finally, use the prevview button to view the current mask.") #create a popup with helpful text
+
+def save_mask():
+    mask_img.save(comparison_folder+"/mask.jpg") #saves PIL image built above as a jpg
+    refresh_mask_preview()
+    mask_pic.image = output_folder+"/mask_preview.jpg"
 
 #Main Window----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 with picamera.PiCamera() as camera: #start up the camera
@@ -695,7 +724,7 @@ with picamera.PiCamera() as camera: #start up the camera
     camera.shutter_speed = ss #set shutter speed
     camera.iso = iso #set camera iso
     camera.resolution = res #set camera resolution
-    time.sleep(3) #wait 3 seconds to allow camera to auto adjust
+    time.sleep(3) #wait 3 seconds to allow camera to auto adjust/warmup
     camera.exposure_mode = "off" #lock camera settings
     
     #start camera stream
@@ -707,15 +736,15 @@ with picamera.PiCamera() as camera: #start up the camera
     #app = App(title='main', layout='auto', width = 1700, height = 800) #create the main application window as a small window
     app = App(title='Main', layout='auto', width = display_width, height = display_height) #create the main application window in a fullsize window
     app.when_closed=shutdown #when the close button is pressed on the main window, stop the program
-    mask_win = Window(app, title='Masking Tool', layout='auto', width = 950, height = 700, visible=False, bg="gray75") #create the masking tool window, make the background slight;y darker than main for contrast
+    mask_win = Window(app, title='Masking Tool', layout='auto', width = 950, height = 800, visible=False, bg="gray75") #create the masking tool window, make the background slight;y darker than main for contrast
     
     #control preview------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    full_preview = Window(app, title="full preview", width=800, height=550, visible=False) #create a "full" preview window
+    full_preview = Window(app, title="full preview", width=800, height=600, visible=False) #create a "full" preview window
     full_pic = Picture(full_preview, image=comp_path+"full_ctrl"+filetype) #add the current full control as an image
-    full_pic_close = PushButton(full_preview, command=full_preview.hide, text="close") #add close button
-    empty_preview = Window(app, title="empty preview", width=800, height=550, visible=False) #create an "empty" preview window
+    full_pic_close = PushButton(full_preview, command=full_preview.hide, text="Close",width=10, height=3) #add close button
+    empty_preview = Window(app, title="empty preview", width=800, height=600, visible=False) #create an "empty" preview window
     empty_pic = Picture(empty_preview, image=comp_path+"empty_ctrl"+filetype) #add the curent empty control as an image
-    empty_pic_close = PushButton(empty_preview, command=empty_preview.hide, text="close") #add close button
+    empty_pic_close = PushButton(empty_preview, command=empty_preview.hide, text="Close",width=10, height=3) #add close button
     
     #setup main window-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     row_pic = Box(app, width=1800, height=500, align='top') #create a container for the images. call it row_pic
@@ -724,22 +753,22 @@ with picamera.PiCamera() as camera: #start up the camera
     #uncomment to hide images (optimal for vnc?)
     #pic_full.hide()
     #pic_empty.hide()
-    row1 = Box(app, width=180, height=50, align='bottom') #create a container for the reset and alarm buttons. call it row1
-    reset_button = PushButton(row1, command=reset_alarm, text="Reset", align='left') #define reset button widget
-    sim_button = PushButton(row1, command=simulate_alarm, text="Simulate Alarm", align='right') #define settings button widget
-    row2 = Box(app, width=300, height=50, align='bottom') #create a container for the control set buttons, call it row2
-    ctrl_set_full = PushButton(row2, command=lambda: set_control("full"), text="Reset Full Control", align='left')
-    ctrl_set_empty = PushButton(row2, command=lambda: set_control("empty"), text="Reset Empty Control", align='right')
-    row3 = Box(app, width=320, height=50, align='bottom') #create a container for the control preview buttons, call it row3
-    empty_ctrl_preview = PushButton(row3, command=empty_ctrl_focus, text="Preview Empty Control", align='right')
-    full_ctrl_preview = PushButton(row3, command=full_ctrl_focus, text="Preview Full Control", align='left')
-    row4 = Box(app, width=240, height=50, align='bottom') #create a container for the control preview buttons, call it row3
-    settings_button = PushButton(row4, command=request_settings, text="Settings", align='left') #define settings button widget
-    alarm_lock = PushButton(row4, command=toggle_alarm_access, text="Alarm access is "+str(alarm_access), align='right') #define settings button widget
-    row0 = Box(app, width=230, height=50, align='bottom') #create a container for the reset and alarm buttons. call it row0
-    sim_eject = PushButton(row0, command=lambda: capture("empty"), text="Simulate Eject", align='right') #define settings button widget
-    sim_open = PushButton(row0, command=lambda: capture("full"), text="Simulate Open", align='left') #define settings button widget
-    mask_button = PushButton(app, command=launch_mask_tool, text="Masking Tool", align='bottom') #define settings button widget
+    row1 = Box(app, width=300, height=75, align='bottom') #create a container for the reset and alarm buttons. call it row1
+    reset_button = PushButton(row1, command=reset_alarm, text="Reset", align='left', height="fill", width="fill") #define reset button widget
+    sim_button = PushButton(row1, command=simulate_alarm, text="Simulate Alarm", align='right', height="fill", width="fill") #define settings button widget
+    row2 = Box(app, width=400, height=75, align='bottom') #create a container for the control set buttons, call it row2
+    ctrl_set_full = PushButton(row2, command=lambda: set_control("full"), text="Reset Full Control", align='left', height="fill", width="fill")
+    ctrl_set_empty = PushButton(row2, command=lambda: set_control("empty"), text="Reset Empty Control", align='right', height="fill", width="fill")
+    row3 = Box(app, width=420, height=75, align='bottom') #create a container for the control preview buttons, call it row3
+    empty_ctrl_preview = PushButton(row3, command=empty_ctrl_focus, text="Preview Empty Control", align='right', height="fill", width="fill")
+    full_ctrl_preview = PushButton(row3, command=full_ctrl_focus, text="Preview Full Control", align='left', height="fill", width="fill")
+    row4 = Box(app, width=340, height=75, align='bottom') #create a container for the control preview buttons, call it row3
+    settings_button = PushButton(row4, command=request_settings, text="Settings", align='left', height="fill", width="fill") #define settings button widget
+    alarm_lock = PushButton(row4, command=toggle_alarm_access, text="Alarm access is "+str(alarm_access), align='right', height="fill", width="fill") #define settings button widget
+    row0 = Box(app, width=330, height=75, align='bottom') #create a container for the reset and alarm buttons. call it row0
+    sim_eject = PushButton(row0, command=lambda: capture("empty"), text="Simulate Eject", align='right', height="fill", width="fill") #define settings button widget
+    sim_open = PushButton(row0, command=lambda: capture("full"), text="Simulate Open", align='left', height="fill", width="fill") #define settings button widget
+    mask_button = PushButton(app, command=launch_mask_tool, text="Masking Tool", align='bottom', height="3", width="20") #define settings button widget
     pic_full.repeat(1, check_signals) #attach repeat widget to the picture widget to run "check_signals" every 1ms
     
     #Setup Masking Tool Window-----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -748,69 +777,75 @@ with picamera.PiCamera() as camera: #start up the camera
     
     drawing = Drawing(mask_win,"fill","fill") #create drawing widget that fills the window
     pid = drawing.image(0,0,image=comparison_folder+"/compare_full_ctrl.jpg", width = res[0], height = res[1]) #add the current control image to the drawing widget
-    mask_row1 = Box(mask_win, width=200, height=50, align='bottom') #create a container
-    mask_old = PushButton(mask_row1, command=show_current_mask, text="See Current Mask", align='left')
-    mask_help = PushButton(mask_row1, command=show_current_mask, text="Help", align='right')
-    mask_row2 = Box(mask_win, width=160, height=50, align='bottom') #create a container
-    mask_save = PushButton(mask_row2, command=lambda: mask_img.save(comparison_folder+"/mask.jpg"), text="Save Mask", align='left') #define button to save mask (saves PIL image as a jpg)
-    mask_close = PushButton(mask_row2, command=mask_win.hide, text="Close", align='right') #define polygon mode toggle button widget
-    mask_row3 = Box(mask_win, width=230, height=50, align='bottom') #create a container
-    mask_kill_last = PushButton(mask_row3, command=kill_last, text="Kill Last Mask", align='left') #define kill last button widget
-    mask_kill_all = PushButton(mask_row3, command=kill_all, text="Kill All Masks", align='right') #define kill all button widget
-    mask_polymode = PushButton(mask_win, command=toggle_mode, text="Mode: Rectangle", align='bottom') #define polygon mode toggle button widget
+    mask_row1 = Box(mask_win, width=250, height=75, align='bottom') #create a container
+    mask_old = PushButton(mask_row1, command=show_current_mask, text="Show Current Mask", align='left',height="fill",width="fill")
+    mask_help = PushButton(mask_row1, command=request_mask_help, text="Help", align='right',height="fill",width="fill")
+    mask_row2 = Box(mask_win, width=200, height=75, align='bottom') #create a container
+    mask_save_but = PushButton(mask_row2, command=save_mask, text="Save Mask", align='left',height="fill",width="fill") #define button to save mask
+    mask_close = PushButton(mask_row2, command=mask_win.hide, text="Close", align='right',height="fill",width="fill") #define polygon mode toggle button widget
+    mask_row3 = Box(mask_win, width=270, height=75, align='bottom') #create a container
+    mask_kill_last = PushButton(mask_row3, command=kill_last, text="Kill Last Mask", align='left',height="fill",width="fill") #define kill last button widget
+    mask_kill_all = PushButton(mask_row3, command=kill_all, text="Kill All Masks", align='right',height="fill",width="fill") #define kill all button widget
+    mask_polymode = PushButton(mask_win, command=toggle_mode, text="Mode: Rectangle", align='bottom',height=3) #define polygon mode toggle button widget
      
     drawing.when_left_button_pressed = start #check for the left click to be pressed
     drawing.when_mouse_dragged = drag #check for the mouse to drag
     drawing.when_left_button_released = finish #checks for left click release
+    
+    #create mask preview window
+    mask_preview = Window(mask_win, title="full preview", width=800, height=600, visible=False) #create a mask preview window
+    mask_pic = Picture(mask_preview, image=current_mask) #add the current mask as an image
+    mask_pic_close = PushButton(mask_preview, command=mask_preview.hide, text="Close",width=10,height=3) #add close button
     #Password Entry Window------------------------------------------------------------------------------------------------------------------------------------------
     pass_win = Window(app, title="Enter Password",layout="auto", width = 300, height = 100, visible=False) #create the password reset window
     pass_win.when_closed=cancel_pass #when the close button is pressed on the password entry window, run the function "cancel_pass"
     pass_input = TextBox(pass_win, align='top') #add old password textbox
-    pass_button_box = Box(pass_win, width=100, height=50, align='bottom') #create a container for password window buttons
-    pass_cancel = PushButton(pass_button_box, command=cancel_pass, text="Cancel", align='right')
-    pass_ok = PushButton(pass_button_box, command=check_pass, text="Ok", align='left')
+    pass_button_box = Box(pass_win, width=200, height=75, align='bottom') #create a container for password window buttons
+    pass_cancel = PushButton(pass_button_box, command=cancel_pass, text="Cancel", align='right',height="fill",width=10)
+    pass_ok = PushButton(pass_button_box, command=check_pass, text="Ok", align='left',height="fill", width=10)
     pass_input.when_key_pressed = pass_enter #if a key is pressed in the text box run the enter check
     pass_win.tk.geometry('%dx%d+%d+%d' % (300, 100, display_width/2, display_height/2)) #respecify settings window size (redundant but required) then position. The window is moved here to be out of the way of the keyboard)
     
     #Password Reset Window Setup------------------------------------------------------------------------------------------------------------------------------------------------------------
-    pass_reset_win = Window(app, title="Password Reset",layout="grid", width = 300, height = 120, visible=False) #create the password reset window
-    old_pass_text = Text(pass_reset_win, text="Old Password:" , grid=[1,1]) #add old password text
+    pass_reset_win = Window(app, title="Password Reset",layout="grid", width = 300, height = 200, visible=False) #create the password reset window
+    old_pass_text = Text(pass_reset_win, text="Old Password:" , grid=[1,1], height=2) #add old password text
     old_pass_input = TextBox(pass_reset_win, grid=[2,1]) #add old password textbox
-    new_pass_text = Text(pass_reset_win, text="New Password:" , grid=[1,2]) #add new password text
+    new_pass_text = Text(pass_reset_win, text="New Password:" , grid=[1,2], height=2) #add new password text
     new_pass_input = TextBox(pass_reset_win, grid=[2,2]) #add new password textbox
-    conf_pass_text = Text(pass_reset_win, text="Confirm New Password:" , grid=[1,3]) #add password confirm text
+    conf_pass_text = Text(pass_reset_win, text="Confirm New Password:" , grid=[1,3], height=2) #add password confirm text
     conf_pass_input = TextBox(pass_reset_win, grid=[2,3]) #add password confirm textbox
-    pass_reset_button = PushButton(pass_reset_win, command=reset_pass, text="set", grid=[2,4]) #add password set button
+    pass_reset_button = PushButton(pass_reset_win, command=reset_pass, text="set", grid=[2,4], height=3, width=10) #add password set button
     conf_pass_input.when_key_pressed = pass_reset_enter #if a key is pressed in the text box run the enter check
+    pass_reset_win.tk.geometry('%dx%d+%d+%d' % (300, 200, display_width/2, display_height/2)) #center the window
 
     #Settings Window Setup--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    set_win = Window(app, title="Settings",layout="grid", width = 950, height = 600, visible=False) #create the settings window
+    set_win = Window(app, title="Settings",layout="grid", width = 1800, height = 600, visible=False) #create the settings window
 
     #create section for ISO
     iso_curr_text = Text(set_win, text="Current ISO: "+str(iso), grid=[1,1]) #define text widget to display current value
     iso_input = TextBox(set_win, grid=[2,1]) #create text box widget to allow input of new value
     iso_input.when_key_pressed = iso_enter #if a key is pressed in the text box run the enter check
-    iso_set = PushButton(set_win, command=change_iso, text="set", grid=[4,1]) #create button widget to save new value
+    iso_set = PushButton(set_win, command=change_iso, text="set", grid=[4,1], height=2, width=10) #create button widget to save new value
     iso_rec_text = Text(set_win, text="Suggested range: 100-800", grid=[5,1]) #create text widget to display recommended range
 
     #create secton for shutter speed (setup identical to ISO, see that section for line by line)
     ss_curr_text = Text(set_win, text="Current Shutter Speed: "+str(ss), grid=[1,2]) 
     ss_input = TextBox(set_win, grid=[2,2])
     ss_input.when_key_pressed = ss_enter #if a key is pressed in the text box run the enter check
-    ss_set = PushButton(set_win, command=change_ss, text="set", grid=[4,2])
+    ss_set = PushButton(set_win, command=change_ss, text="set", grid=[4,2], height=2, width=10)
     ss_rec_text = Text(set_win, text="Suggested range: 0-60,000", grid=[5,2])
 
     #create section for setting camera mode
     cm_curr_text = Text(set_win, text="Current Shutter Mode: "+cm, grid=[1,3]) #create text widget to display current mode
-    cm_combo = Combo(set_win, options=['sports', 'auto','antishake'], grid=[2,3]) #create drop down menu widget to select new camera mode TO DO: Add more options
-    cm_set = PushButton(set_win, command=change_cm, text="set", grid=[4,3]) #create button widget to save mode
+    cm_combo = Combo(set_win, options=['sports', 'auto','antishake'], grid=[2,3], height=2) #create drop down menu widget to select new camera mode TO DO: Add more options
+    cm_set = PushButton(set_win, command=change_cm, text="set", grid=[4,3], height=2, width=10) #create button widget to save mode
     cm_rec_text = Text(set_win, text="Suggested Mode: sports", grid=[5,3]) #create text widget to display recommended mode
 
     #create secton for image rotation (setup identical to ISO, see that section for line by line)
     rot_curr_text = Text(set_win, text="Current Image Rotation: "+str(rot), grid=[1,4])
     rot_input = TextBox(set_win, grid=[2,4])
     rot_input.when_key_pressed = rot_enter #if a key is pressed in the text box run the enter check
-    rot_set = PushButton(set_win, command=change_rot, text="set", grid=[4,4])
+    rot_set = PushButton(set_win, command=change_rot, text="set", grid=[4,4], height=2, width=10)
     rot_rec_text = Text(set_win, text="Suggested range: 0-180", grid=[5,4])
 
     #create section for image resolution
@@ -819,50 +854,50 @@ with picamera.PiCamera() as camera: #start up the camera
     resh_input = TextBox(set_win, grid=[3,5]) #create textbox widget for height input
     resw_input.when_key_pressed = res_enter #if a key is pressed in the text box run the enter check
     resh_input.when_key_pressed = res_enter #if a key is pressed in the text box run the enter check
-    res_set = PushButton(set_win, command=change_res, text="set", grid=[4,5]) #create button widget to save resolution
+    res_set = PushButton(set_win, command=change_res, text="set", grid=[4,5], height=2, width=10) #create button widget to save resolution
     res_rec_text = Text(set_win, text="Suggested: 852 480 Max: 3280 2464", grid=[5,5]) #create text widget to display recommended/max values
 
     #create secton for image threshold (setup identical to ISO, see that section for line by line)
     thresh_curr_text = Text(set_win, text="Current Decision Threshold: "+str(thresh), grid=[1,6])
     thresh_input = TextBox(set_win, grid=[2,6])
     thresh_input.when_key_pressed = thresh_enter #if a key is pressed in the text box run the enter check
-    thresh_set = PushButton(set_win, command=change_thresh, text="set", grid=[4,6])
+    thresh_set = PushButton(set_win, command=change_thresh, text="set", grid=[4,6], height=2, width=10)
     thresh_rec_text = Text(set_win, text="Suggested range: 8000-20,000", grid=[5,6])
 
     #create secton for sensitivity (setup identical to ISO, see that section for line by line)
-    sens_curr_text = Text(set_win, text="Current Contrast Sensitivity: "+str(sens), grid=[1,7])
-    sens_input = TextBox(set_win, grid=[2,7])
+    sens_curr_text = Text(set_win, text="Current Contrast Sensitivity: "+str(sens), grid=[6,1])
+    sens_input = TextBox(set_win, grid=[7,1])
     sens_input.when_key_pressed = sens_enter #if a key is pressed in the text box run the enter check
-    sens_set = PushButton(set_win, command=change_sens, text="set", grid=[4,7])
-    sens_rec_text = Text(set_win, text="Suggested range: 3-15 (Decimal)", grid=[5,7])
+    sens_set = PushButton(set_win, command=change_sens, text="set", grid=[8,1], height=2, width=10)
+    sens_rec_text = Text(set_win, text="Suggested range: 3-15 (Decimal)", grid=[9,1])
     
     #create secton for mold open capture delay (setup identical to ISO, see that section for line by line)
-    open_delay_curr_text = Text(set_win, text="Current Mold Open Capture Delay: "+str(open_delay), grid=[1,8])
-    open_delay_input = TextBox(set_win, grid=[2,8])
+    open_delay_curr_text = Text(set_win, text="Current Mold Open Capture Delay: "+str(open_delay), grid=[6,2])
+    open_delay_input = TextBox(set_win, grid=[7,2])
     open_delay_input.when_key_pressed = open_delay_enter #if a key is pressed in the text box run the enter check
-    open_delay_set = PushButton(set_win, command=change_sens, text="set", grid=[4,8])
-    open_delay_rec_text = Text(set_win, text="Suggested range: 0.01-0.2 (Decimal)", grid=[5,8])
+    open_delay_set = PushButton(set_win, command=change_sens, text="set", grid=[8,2], height=2, width=10)
+    open_delay_rec_text = Text(set_win, text="Suggested range: 0.01-0.2 (Decimal)", grid=[9,2])
     
     #create secton for ejector fire capture delay (setup identical to ISO, see that section for line by line)
-    eject_delay_curr_text = Text(set_win, text="Current Ejector Fire Capture Delay: "+str(eject_delay), grid=[1,9])
-    eject_delay_input = TextBox(set_win, grid=[2,9])
+    eject_delay_curr_text = Text(set_win, text="Current Ejector Fire Capture Delay: "+str(eject_delay), grid=[6,3])
+    eject_delay_input = TextBox(set_win, grid=[7,3])
     eject_delay_input.when_key_pressed = eject_delay_enter #if a key is pressed in the text box run the enter check
-    eject_delay_set = PushButton(set_win, command=change_sens, text="set", grid=[4,9])
-    eject_delay_rec_text = Text(set_win, text="Suggested range: 0.1-0.3 (Decimal)", grid=[5,9])
+    eject_delay_set = PushButton(set_win, command=change_sens, text="set", grid=[8,3], height=2, width=10)
+    eject_delay_rec_text = Text(set_win, text="Suggested range: 0.1-0.3 (Decimal)", grid=[9,3])
 
     #create secton for server ip (setup identical to ISO, see that section for line by line)
-    sip_curr_text = Text(set_win, text="Current Server IP: "+server_ip, grid=[1,10])
-    sip_input = TextBox(set_win, grid=[2,10])
+    sip_curr_text = Text(set_win, text="Current Server IP: "+server_ip, grid=[6,4])
+    sip_input = TextBox(set_win, grid=[7,4])
     sip_input.when_key_pressed = sip_enter #if a key is pressed in the text box run the enter check
-    sip_set = PushButton(set_win, command=change_sip, text="set", grid=[4,10])
-    sip_rec_text = Text(set_win, text="Default: 192.168.0.159", grid=[5,10])
+    sip_set = PushButton(set_win, command=change_sip, text="set", grid=[8,4], height=2, width=10)
+    sip_rec_text = Text(set_win, text="Default: 192.168.0.159", grid=[9,4])
     
     #add settings buttons
-    help_but = PushButton(set_win, command=request_setting_help, text="Help", grid=[2,11]) #create button widget for help popup
-    close_but = PushButton(set_win, command=close_settings, text="Close", grid=[3,11]) #create button widget to be able to close settings page (just executes hide command)
-    but = PushButton(set_win, command=lambda: capture("test"), text="Refresh Max Score", grid=[4,11]) #Depreceated button
-    new_pass_but = PushButton(set_win, command=pass_reset_win.show, text="Reset Password", grid=[5,11]) #create button widget to reset the password
-    transmit_but = PushButton(set_win, command=transmit, text="Manually Transmit", grid=[1,11]) #create button widget to reset the password
+    help_but = PushButton(set_win, command=request_setting_help, text="Help", grid=[3,11], height=2, width=15) #create button widget for help popup
+    close_but = PushButton(set_win, command=close_settings, text="Close", grid=[4,11], height=2, width=15) #create button widget to be able to close settings page (just executes hide command)
+    but = PushButton(set_win, command=lambda: capture("test"), text="Refresh Max Score", grid=[5,11], height=2, width=15) #Depreceated button
+    new_pass_but = PushButton(set_win, command=pass_reset_win.show, text="Reset Password", grid=[6,11], height=2, width=15) #create button widget to reset the password
+    transmit_but = PushButton(set_win, command=transmit, text="Manually Transmit", grid=[7,11], height=2, width=15) #create button widget to reset the password
 
     #Setup Finish------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     setup_end = time.time() #stop the timer
