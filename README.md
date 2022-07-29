@@ -1,3 +1,4 @@
+### Predeployment copy is currently the most up to date version. Main emulated is depreceated!
 # Image_Compare
 This is yet another look at the current state of the project. Below I will go over each file in the repo. This time around the system contains two Raspberry Pi's a client attached to the machine that is able to operate independently and a server that is currently just used for data archival.
 
