@@ -1,5 +1,4 @@
 # #!/usr/bin/python #uncomment to designate the program as executable
-from PIL import ImageTk
 import PIL
 from guizero import App,Text,TextBox,PushButton,Picture,question,Window,Combo,info,Box,Drawing
 import time
@@ -8,12 +7,11 @@ import os
 import picamera
 from io import BytesIO
 import numpy as np
-from PIL import Image, ImageOps, ImageChops, ImageEnhance, ImageDraw, ImageFilter
+from PIL import Image, ImageOps, ImageChops, ImageEnhance, ImageDraw, ImageFilter, ImageTk
 import matplotlib.pyplot as plt
 import subprocess
 from gpiozero import DigitalInputDevice, DigitalOutputDevice
 import shutil
-
 
 #setup-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 setup_start = time.time() #start startup timer
@@ -44,7 +42,6 @@ except: #upon fail (likely indicating this program was started without the start
 
 #intialize/write some variables
 good = True #create variable to hold pass/fail status
-filetype = ".jpg" #specify image file filetype (leftover debug)
 n = 0 #startup image counter
 res_max = (3280, 2464) #define the max camera resolution
 #manually define display dimensions (maybe switch this to autodetect later)
@@ -61,8 +58,8 @@ mold_open_old = 1 #intialize the mold open last status
 eject_fire_old = 1 #initialize ejector fire last status
 full_score = None #intialize full score
 full_pass = None #initialize full pass/fail
-max_score = None
-x1, y1 = None, None
+max_score = None #intialize max score value
+x1, y1 = None, None #intialize starting coords of masking tool
 tim = time.asctime() #intitizlize current time variable for capture sequence and to save the image mask
 tim = tim[:13]+"_"+tim[14:16]+"_"+tim[17:24] #change time text format from hour:minute:second to hour_minute_second (windows filesystems dont like the ":" symbol in filenames)
 
@@ -75,16 +72,6 @@ full_ctrl = Image.open(comparison_folder+"/compare_full_ctrl.jpg") #load full co
 empty_ctrl = Image.open(comparison_folder+"/compare_empty_ctrl.jpg") #load empty control
 full_ctrl_candidate = full_ctrl #intialize full control  candidate (this way if the user attempts to reset the control before a candidate is set it doesn' break)
 empty_ctrl_candidate = empty_ctrl #intialize empty control candidate
-
-#load the image mask preview
-mask = Image.open(comparison_folder+"/mask.jpg") #load image mask
-mask_color = ImageOps.colorize(mask, black, color, blackpoint=0, whitepoint=255, midpoint=127) #convert from black and white to rgb
-enhancer = ImageEnhance.Brightness(mask_color) #specify that we want to adjust the brightness of the mask
-mask_color = enhancer.enhance(0.5) #decrease the brightness by 50% as to not obstruct the parts in the image
-current_mask = ImageChops.add(mask_color,full_ctrl) #superimpose the images
-current_mask.save(output_folder+"/mask.jpg") #write over the currently archived mask preview
-
-mask = mask.convert("1") #convert it to mode "1" (1 or 0 value for each pixel ie. B&W one channel binary) for use as the filter
 
 #open the log file
 log = open(log_path, "a") #open log csv file in "append mode"
@@ -135,10 +122,10 @@ def capture(name): #possible inputs "full" "empty" "test"
     #set the correct control image (ie. we are storing the respective controls as PIL images and we write to the "main" control named "control" based on which image we are capturing)
     if name == "full": #if the arg is "full"
         control = full_ctrl #set the main control to the full control
-        comp = Image.open(comparison_folder+"/compare_full_edit2.jpg") #manually overwrite image to load
+        #comp = Image.open(comparison_folder+"/compare_full_edit2.jpg") #manually overwrite image to load
     elif name == "empty": #if the arg is empty
         control = empty_ctrl #set the main control to the empty control
-        comp = Image.open(comparison_folder+"/compare_empty_edit2.jpg") #manually overwrite image to load
+        #comp = Image.open(comparison_folder+"/compare_empty_edit2.jpg") #manually overwrite image to load
     elif name == "test":
         control = full_ctrl #set the main control to the full control
         comp = empty_ctrl
@@ -148,10 +135,10 @@ def capture(name): #possible inputs "full" "empty" "test"
     diff = ImageOps.grayscale(diff) #convert the difference to black and white
     diff = ImageChops.multiply(diff,mask) #introduce the masking filter (ie. any pixel location where the masking filter is white, the diff image is allowed to pass. Any pixel location where the masking filter is black, the diff image is turned black )
     #diff = diff.point( lambda p: 255 if p > 255/sens else 0) #turn any point above defined sensitivity white "255" and anything below black "0". Effectively turns grayscale to black and white.
-    diff = diff.filter(ImageFilter.BoxBlur(4))
-    enhancer = ImageEnhance.Contrast(diff)
-    diff = enhancer.enhance(1.5)
-    diff = diff.point( lambda p: 255 if p > 255/sens else 0)
+    diff = diff.filter(ImageFilter.BoxBlur(4)) #blur the image to remove noise
+    enhancer = ImageEnhance.Contrast(diff) #setup contrast adjust tool
+    diff = enhancer.enhance(1.5) #increase the contrast to better show points of interest
+    diff = diff.point( lambda p: 255 if p > 255/sens else 0) #Make all pixels below the defined threshold black and all above white
     
     #analyze the difference and do something with the results
     tot = np.sum(np.array(diff)/255) #convert diff to an array and find the elementwise sum, call it tot for "total". This represents the quantity of pixels that are different
@@ -160,14 +147,14 @@ def capture(name): #possible inputs "full" "empty" "test"
         #print("Object detected") #say an object was detected
         simulate_alarm()
         good = False #designate as not good/fail
-    elif (tot > max_score) and (name == "full"):
-        print("Misfire!")
-        good = True
-        name = "full misfire"
-    elif (tot > max_score) and (name == "empty"):
-        print("Misfire!")
-        good = True
-        name = "empty misfire"
+    elif (tot > max_score) and (name == "full"): #if the score is higher than the max possible and name is "full"
+        print("Misfire!") #say it is a misfire
+        good = True #dont set off the alarm
+        name = "full misfire" #declate it as a full misfire
+    elif (tot > max_score) and (name == "empty"): #if the score is higher than the max possible and name is "empty"
+        print("Misfire!") #say it is a misfire
+        good = True #dont set off the alarm
+        name = "empty misfire" #declate it as an empty misfire
     else: #otherwise do the following:
         #print("No object detected") #say an object was not detected
         good = True #designate as good/pass
@@ -181,7 +168,6 @@ def capture(name): #possible inputs "full" "empty" "test"
     disp_start = time.time() #start display time timer
 
     #generate the output image
-
     diff = ImageOps.colorize(diff, black, color, blackpoint=0, whitepoint=255, midpoint=127) #convert black and white differenc image to black and color for more contrast when displaying
     enhancer = ImageEnhance.Brightness(comp) #specify that we want to adjust the brightness of comp
     candidate = comp #save the comparison image to as a generic candidate for use later
@@ -191,12 +177,9 @@ def capture(name): #possible inputs "full" "empty" "test"
     #rotate image if needed (if camera is mounted sideways or upsidedown)
     result = result.rotate(rot)
     
-    if name == "full":
-        
+    if name == "full": #if the name is "full"
         tim = time.asctime() #grab current time as to match log name and file name
         tim = tim[:13]+"_"+tim[14:16]+"_"+tim[17:24] #change time text format from hour:minute:second to hour_minute_second (windows filesystems dont like the ":" symbol in filenames)
-    
-        
         pic_full.image = result #send results to the picture widget on the main page
         if check_size(image_path): #if the image folder enough space
             result.save(image_path+tim+"_2.jpg") #save results as a jpg with the current date and time
@@ -219,21 +202,21 @@ def capture(name): #possible inputs "full" "empty" "test"
         #write the the data from empty and close to a line in the log (run at the end of ejector fire as that will ALWAYS happen after mold open)
         log.write(tim+","+str(full_score)+","+str(full_pass)+","+str(tot)+","+str(good)+"\n") #write time, score, and pass/fail to log
         log.flush()#save it
-    elif name == "test":
-        print("Max Score: "+str(tot))
-        max_score = int(tot)
-        show_current_mask()
+    elif name == "test": #if we are running a full test (compare full image to empty to calculate the highest possible score. anything above this score is a mistimed image
+        print("Max Score: "+str(tot)) #print the highest possible score
+        max_score = int(tot) #update the internal max score
+        show_current_mask() #run code to show the current mask on the image
         config_write(12,max_score) #save to config file
-    elif name == "empty misfire":
-        pic_empty.image = result #send results to the picture widget on the main page
-        empty_ctrl_candidate = candidate #update the current control candidate
-    elif name == "full misfire":
-        pic_full.image = result #send results to the picture widget on the main page
-        full_ctrl_candidate = candidate #update the current control candidate
+    elif name == "empty misfire": #if the current capture is an empty misfire
+        pic_empty.image = result #refresh the main page image
+        empty_ctrl_candidate = candidate #update the current control candidate anyway, we may need to set this as the new control anyway
+    elif name == "full misfire": #if the current capture is a sull misfire
+        pic_full.image = result #refresh the main page image
+        full_ctrl_candidate = candidate #update the current control candidate anyway, we may need to set this as the new control anyway
         
     #terminate timer and display
     disp_end = time.time() #stop the timer
-    disp_time = disp_end - disp_start #calculate elapsed time since display start
+    #disp_time = disp_end - disp_start #calculate elapsed time since display start
     #print('Display time: {} seconds'.format(disp_time)) #display the display time
 
 #Password Functions---------------------------------------------------------------------------------------------------------------------------------------
@@ -614,7 +597,7 @@ def set_control(name): #define code to set the control image as the last image a
     global full_ctrl, empty_ctrl #make full_ctrl and empty_ctrl global so they can be written to
     print("resetting "+name) #print status message
     try: #attempt to do the following
-        os.remove(comp_path+name+"_ctrl"+filetype) #delete the current control
+        os.remove(comp_path+name+"_ctrl.jpg") #delete the current control
     except: #upon failure do the following (will fail if no image is present)
         pass #do nothing
     #save the control candidate as the control jpg and update windows containing the control images
@@ -624,19 +607,21 @@ def set_control(name): #define code to set the control image as the last image a
         global pid
         drawing.delete(pid) #delete the masking window copy of the full control
         pid = drawing.image(0,0,image=comparison_folder+"/compare_full_ctrl.jpg", width = res[0], height = res[1]) #update the masking window image with the new control
-        full_pic.image = comp_path+name+"_ctrl"+filetype #update the preview image
+        full_pic.image = comp_path+name+"_ctrl.jpg" #update the preview image
     elif name == "empty": #if name is "empty"
         empty_ctrl_candidate.save(comparison_folder+"/compare_"+name+"_ctrl.jpg") #save the empty control candidate
-        empty_pic.image = comp_path+name+"_ctrl"+filetype #update the preview image
+        empty_pic.image = comp_path+name+"_ctrl.jpg" #update the preview image
         empty_ctrl = empty_ctrl_candidate #write over the current control with the candidate
 
 def refresh_mask_preview(): #define code to generate and save the mask preview for use in the mask tool and archive
+    global mask, current_mask
     mask = Image.open(comparison_folder+"/mask.jpg") #load image mask (yes this is necessary)
     mask_color = ImageOps.colorize(mask, black, color, blackpoint=0, whitepoint=255, midpoint=127) #convert from black and white to rgb
     enhancer = ImageEnhance.Brightness(mask_color) #specify that we want to adjust the brightness of the mask
     mask_color = enhancer.enhance(0.5) #decrease the brightness by 50% as to not obstruct the parts in the image
     current_mask = ImageChops.add(mask_color,full_ctrl) #superimpose the images
     current_mask.save(output_folder+"/mask_preview.jpg") #write over the currently archived mask preview
+    mask = mask.convert("1") #convert it to mode "1" (1 or 0 value for each pixel ie. B&W one channel binary) for use as the filter
     
 #Masking Tool Functions------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 def launch_mask_tool(): #define code to launch masking tool window
@@ -718,13 +703,15 @@ def save_mask():
     mask_pic.image = output_folder+"/mask_preview.jpg"
 
 #Main Window----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+#code resumes here after running setup stuff at the top
+refresh_mask_preview() #refresh update the preview mask in the output folder now that we have loaded all functions (this also loads the mask PIL image)
 with picamera.PiCamera() as camera: #start up the camera
     #set camera settings
     camera.exposure_mode = cm #set camera mode
     camera.shutter_speed = ss #set shutter speed
     camera.iso = iso #set camera iso
     camera.resolution = res #set camera resolution
-    time.sleep(3) #wait 3 seconds to allow camera to auto adjust/warmup
+    time.sleep(2.5) #wait 2.5 seconds to allow camera to auto adjust/warmup
     camera.exposure_mode = "off" #lock camera settings
     
     #start camera stream
@@ -740,19 +727,16 @@ with picamera.PiCamera() as camera: #start up the camera
     
     #control preview------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     full_preview = Window(app, title="full preview", width=800, height=600, visible=False) #create a "full" preview window
-    full_pic = Picture(full_preview, image=comp_path+"full_ctrl"+filetype) #add the current full control as an image
+    full_pic = Picture(full_preview, image=comp_path+"full_ctrl.jpg") #add the current full control as an image
     full_pic_close = PushButton(full_preview, command=full_preview.hide, text="Close",width=10, height=3) #add close button
     empty_preview = Window(app, title="empty preview", width=800, height=600, visible=False) #create an "empty" preview window
-    empty_pic = Picture(empty_preview, image=comp_path+"empty_ctrl"+filetype) #add the curent empty control as an image
+    empty_pic = Picture(empty_preview, image=comp_path+"empty_ctrl.jpg") #add the curent empty control as an image
     empty_pic_close = PushButton(empty_preview, command=empty_preview.hide, text="Close",width=10, height=3) #add close button
     
     #setup main window-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     row_pic = Box(app, width=1800, height=500, align='top') #create a container for the images. call it row_pic
-    pic_full = Picture(row_pic, image="/home/pi/Desktop/Object_Detection/compare/ref.jpg", align='left') #create picture widget to show the mold open image
-    pic_empty = Picture(row_pic, image="/home/pi/Desktop/Object_Detection/compare/ref.jpg", align='right') #create picture widget to show the ejector fire image
-    #uncomment to hide images (optimal for vnc?)
-    #pic_full.hide()
-    #pic_empty.hide()
+    pic_full = Picture(row_pic, image="/home/pi/Desktop/main_emulated/menu_image.jpg", align='left') #create picture widget to show the mold open image
+    pic_empty = Picture(row_pic, image="/home/pi/Desktop/main_emulated/menu_image.jpg", align='right') #create picture widget to show the ejector fire image
     row1 = Box(app, width=300, height=75, align='bottom') #create a container for the reset and alarm buttons. call it row1
     reset_button = PushButton(row1, command=reset_alarm, text="Reset", align='left', height="fill", width="fill") #define reset button widget
     sim_button = PushButton(row1, command=simulate_alarm, text="Simulate Alarm", align='right', height="fill", width="fill") #define settings button widget
@@ -778,8 +762,8 @@ with picamera.PiCamera() as camera: #start up the camera
     drawing = Drawing(mask_win,"fill","fill") #create drawing widget that fills the window
     pid = drawing.image(0,0,image=comparison_folder+"/compare_full_ctrl.jpg", width = res[0], height = res[1]) #add the current control image to the drawing widget
     mask_row1 = Box(mask_win, width=250, height=75, align='bottom') #create a container
-    mask_old = PushButton(mask_row1, command=show_current_mask, text="Show Current Mask", align='left',height="fill",width="fill")
-    mask_help = PushButton(mask_row1, command=request_mask_help, text="Help", align='right',height="fill",width="fill")
+    mask_old = PushButton(mask_row1, command=show_current_mask, text="Show Current Mask", align='left',height="fill",width="fill") #create a button to display the current mask
+    mask_help = PushButton(mask_row1, command=request_mask_help, text="Help", align='right',height="fill",width="fill") #create a button to open mask tool help
     mask_row2 = Box(mask_win, width=200, height=75, align='bottom') #create a container
     mask_save_but = PushButton(mask_row2, command=save_mask, text="Save Mask", align='left',height="fill",width="fill") #define button to save mask
     mask_close = PushButton(mask_row2, command=mask_win.hide, text="Close", align='right',height="fill",width="fill") #define polygon mode toggle button widget
