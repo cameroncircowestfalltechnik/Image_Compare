@@ -35,11 +35,21 @@ mask_archive = output_folder+"/mask_archive/"
 comp_path = comparison_folder+"/compare_" #specify image file location
 
 #kill the startup program
+prog_id = None
 try: #attempt the following
-    os.system("cd /home/pi/Desktop") #navigate to program location (probably redundant)
-    os.system("\n pkill Main_Emulated_Startup.py") #kill the startup script-
-except: #upon fail (likely indicating this program was started without the startup prgram being run
-    pass #do nothing
+    prog_id = subprocess.check_output(['pidof', 'matchbox-keyboard']) #read the program id of the keyboard
+    prog_id = int(prog_id) #convert the id to an interger in order to remove superfluous text
+    print(prog_id)
+    subprocess.run(['kill', str(prog_id)]) #kill a program with the program id we grabbed above
+except subprocess.CalledProcessError: #if an error is returned (the program id is not found and thus not running)
+    pass
+
+
+# try: #attempt the following
+#     os.system("cd /home/pi/Desktop") #navigate to program location (probably redundant)
+#     os.system("\n pkill Main_Emulated_Startup.py") #kill the startup script-
+# except: #upon fail (likely indicating this program was started without the startup prgram being run
+#     pass #do nothing
 
 #intialize/write some variables
 good = True #create variable to hold pass/fail status
@@ -559,9 +569,9 @@ def toggle_alarm_access(): #define code to toggle alarm lockout
 
 def restart(): #define code to restart the program
     keyboard("close") #close the keyboard
-    #camera.close() #shutoff the camera
-    #app.destroy() #kill the new windows created by the programs
-    #os.system("\n sudo python Main_Emulated_Startup.py") #run the prgram startup script
+    camera.close() #shutoff the camera
+    app.destroy() #kill the new windows created by the programs
+    os.system("\n sudo python Main_Startup.py") #run the prgram startup script
 
 def shutdown(): #define code to shutdown the program
     keyboard("close") #close the keyboard
@@ -570,9 +580,7 @@ def shutdown(): #define code to shutdown the program
     quit() #stop the program
     
 def transmit(): #define code to transmit files to server This could probably jsut be done by a really long guizero button instead of as a function
-    #DISABLED
-    #subprocess.Popen(["python", "Main_Emulated_Transmit.py", "-sip", server_ip]) #run the transmit script
-    print("transmission disabled on this version") #print that tranmission is curently disabled
+    subprocess.Popen(["python", "Main_Transmit.py", "-sip", server_ip]) #run the transmit script
 
 def keyboard(arg): #define code to open/close/toggle the keyboard
     #recieved argument:"open"
