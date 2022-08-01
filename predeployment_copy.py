@@ -1,5 +1,6 @@
 # #!/usr/bin/python #uncomment to designate the program as executable
-import PIL
+#import PIL
+from PIL import Image, ImageOps, ImageChops, ImageEnhance, ImageDraw, ImageFilter, ImageTk
 from guizero import App,Text,TextBox,PushButton,Picture,question,Window,Combo,info,Box,Drawing
 import time
 import tkinter as tk
@@ -7,7 +8,6 @@ import os
 import picamera
 from io import BytesIO
 import numpy as np
-from PIL import Image, ImageOps, ImageChops, ImageEnhance, ImageDraw, ImageFilter, ImageTk
 import matplotlib.pyplot as plt
 import subprocess
 from gpiozero import DigitalInputDevice, DigitalOutputDevice
@@ -30,6 +30,7 @@ output_folder = base_folder+"/output"
 log_path = output_folder+"/log.csv" #specify log location
 startup_log_path = output_folder+"/startup_log.csv" #specify startup log location
 image_path = output_folder+"/images/" #specify output image path
+fail_folder = output_folder+"/fail/"
 mask_archive = output_folder+"/mask_archive/"
 comp_path = comparison_folder+"/compare_" #specify image file location
 
@@ -48,7 +49,9 @@ res_max = (3280, 2464) #define the max camera resolution
 display_width = 1920 #define display width
 display_height = 1080 #define display height
 size_max = 5000000000 #set max output folder size (currently 5 GB)
+#size_max = 24645369+(54860*5)
 size_status = 1 #create a interger to count how many times the size has been checked and maintain its status
+size_check_reset = 10 #define how many times to request a folder check before actually running
 alarm_access = False #intialize Alarm lockout
 #server_ip = "192.168.0.159" #specify server IP
 did = [] #create empty list to store mask drawing ids (stores the ids of all drawings on the image)
@@ -70,6 +73,7 @@ color = (0,255,0) #define colored pixel rgb value (in this case it's currently g
 #load the control images
 full_ctrl = Image.open(comparison_folder+"/compare_full_ctrl.jpg") #load full control
 empty_ctrl = Image.open(comparison_folder+"/compare_empty_ctrl.jpg") #load empty control
+
 full_ctrl_candidate = full_ctrl #intialize full control  candidate (this way if the user attempts to reset the control before a candidate is set it doesn' break)
 empty_ctrl_candidate = empty_ctrl #intialize empty control candidate
 
@@ -103,7 +107,7 @@ startup_log.close() #close the startup log (auto saves new data)
 #The Camera Zone------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #capture and process the image
 def capture(name): #possible inputs "full" "empty" "test"
-    global full_score, full_pass, full_ctrl_candidate, empty_ctrl_candidate, max_score, tim
+    global full_score, full_pass, full_ctrl, empty_ctrl, max_score, tim, full_ctrl_candidate, empty_ctrl_candidate
     cap_start = time.time() #start image capture timer
     
     #take picture
@@ -122,10 +126,10 @@ def capture(name): #possible inputs "full" "empty" "test"
     #set the correct control image (ie. we are storing the respective controls as PIL images and we write to the "main" control named "control" based on which image we are capturing)
     if name == "full": #if the arg is "full"
         control = full_ctrl #set the main control to the full control
-        #comp = Image.open(comparison_folder+"/compare_full_edit2.jpg") #manually overwrite image to load
+        #comp = Image.open(comparison_folder+"/compare_full_edit.jpg") #manually overwrite image to load
     elif name == "empty": #if the arg is empty
         control = empty_ctrl #set the main control to the empty control
-        #comp = Image.open(comparison_folder+"/compare_empty_edit2.jpg") #manually overwrite image to load
+        #comp = Image.open(comparison_folder+"/compare_empty_edit.jpg") #manually overwrite image to load
     elif name == "test":
         control = full_ctrl #set the main control to the full control
         comp = empty_ctrl
@@ -135,7 +139,7 @@ def capture(name): #possible inputs "full" "empty" "test"
     diff = ImageOps.grayscale(diff) #convert the difference to black and white
     diff = ImageChops.multiply(diff,mask) #introduce the masking filter (ie. any pixel location where the masking filter is white, the diff image is allowed to pass. Any pixel location where the masking filter is black, the diff image is turned black )
     #diff = diff.point( lambda p: 255 if p > 255/sens else 0) #turn any point above defined sensitivity white "255" and anything below black "0". Effectively turns grayscale to black and white.
-    diff = diff.filter(ImageFilter.BoxBlur(4)) #blur the image to remove noise
+    diff = diff.filter(ImageFilter.GaussianBlur(4)) #blur the image to remove noise
     enhancer = ImageEnhance.Contrast(diff) #setup contrast adjust tool
     diff = enhancer.enhance(1.5) #increase the contrast to better show points of interest
     diff = diff.point( lambda p: 255 if p > 255/sens else 0) #Make all pixels below the defined threshold black and all above white
@@ -165,7 +169,6 @@ def capture(name): #possible inputs "full" "empty" "test"
     #print('Process time: {} seconds'.format(process_time)) #display the image processing time
     decision_time = process_end - cap_start #calculate elapsed time  since decision start
     print('Decision Time: {} seconds'.format(round(decision_time,4))) #display the decision making time
-    disp_start = time.time() #start display time timer
 
     #generate the output image
     diff = ImageOps.colorize(diff, black, color, blackpoint=0, whitepoint=255, midpoint=127) #convert black and white differenc image to black and color for more contrast when displaying
@@ -181,44 +184,45 @@ def capture(name): #possible inputs "full" "empty" "test"
         tim = time.asctime() #grab current time as to match log name and file name
         tim = tim[:13]+"_"+tim[14:16]+"_"+tim[17:24] #change time text format from hour:minute:second to hour_minute_second (windows filesystems dont like the ":" symbol in filenames)
         pic_full.image = result #send results to the picture widget on the main page
-        if check_size(image_path): #if the image folder enough space
-            result.save(image_path+tim+"_2.jpg") #save results as a jpg with the current date and time
-        else:
-            print("output folder full, not saving image")
         #save output to add to log in a moment
         full_score = tot #save the score
         full_pass = good #save the pass/fail
         full_ctrl_candidate = candidate #update the current control candidate (basically copy the image so that it can write over the current control if desired
-    
     elif name == "empty":
         pic_empty.image = result #send results to the picture widget on the main page
-        
-        if check_size(image_path): #if the image folder enough space
-            result.save(image_path+tim+"_1.jpg") #save results as a jpg with the current date and time
-        else:
-            print("output folder full, not saving image")
-        empty_ctrl_candidate = candidate #update the current control candidate
-            
+        empty_ctrl_candidate = candidate #update the current control candidate   
         #write the the data from empty and close to a line in the log (run at the end of ejector fire as that will ALWAYS happen after mold open)
         log.write(tim+","+str(full_score)+","+str(full_pass)+","+str(tot)+","+str(good)+"\n") #write time, score, and pass/fail to log
         log.flush()#save it
+        
     elif name == "test": #if we are running a full test (compare full image to empty to calculate the highest possible score. anything above this score is a mistimed image
-        print("Max Score: "+str(tot)) #print the highest possible score
-        max_score = int(tot) #update the internal max score
-        show_current_mask() #run code to show the current mask on the image
+        max_score = 0.9*int(tot) #update the internal max score (multiply by 0.9 so that values that are close can still trigger as misfire)
+        print("Max Score: "+str(max_score)) #print the highest possible score
         config_write(12,max_score) #save to config file
+        return #finish running the function
     elif name == "empty misfire": #if the current capture is an empty misfire
         pic_empty.image = result #refresh the main page image
         empty_ctrl_candidate = candidate #update the current control candidate anyway, we may need to set this as the new control anyway
+        return #finish running the function
     elif name == "full misfire": #if the current capture is a sull misfire
         pic_full.image = result #refresh the main page image
         full_ctrl_candidate = candidate #update the current control candidate anyway, we may need to set this as the new control anyway
-        
-    #terminate timer and display
-    disp_end = time.time() #stop the timer
-    #disp_time = disp_end - disp_start #calculate elapsed time since display start
-    #print('Display time: {} seconds'.format(disp_time)) #display the display time
-
+        return #finish running the function
+    
+    #the code should only be able to execute the following if "name" is full or empty
+    if check_size(image_path): #if the image folder enough space
+        result.save(image_path+tim+"_"+name+".jpg") #save results as a jpg with the current date and time
+        folder_has_space = True
+    else:
+        print("output folder full, not saving image")
+        folder_has_space = False            
+    if good == True: #if the image passed
+            set_control(name) #reset the control
+    else: #if the image failed
+        if folder_has_space == True: #if the image folder enough space
+            candidate.save(fail_folder+tim+"_"+name+"_raw.jpg") #save the raw image to the fail folder
+            result.save(fail_folder+tim+"_"+name+".jpg") #save a copy of the results to the fail folder
+            
 #Password Functions---------------------------------------------------------------------------------------------------------------------------------------
 def request_settings(): #define code to request the openeing of the settings page
     keyboard("open") #open the keyboard
@@ -493,24 +497,31 @@ def pass_enter(event):
         check_pass() #update the entry
         
 #Utility Functions------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-def check_size(dest): #create function to check if folder size is greater than max
+def check_folder_size(path): #define code to get the size of a folder
+    size = 0 #intialize size counter
+    for entry in os.scandir(path): #for every entry in the specified path do the following
+        if entry.is_file(): #if it is a file
+            size = size+os.path.getsize(entry) #add the file size to the total size
+        elif entry.is_dir(): #if it is a folder
+            size = size+check_folder_size(entry.path) #get the size of the contents of the folder and add them to the total
+    return size #return the folder size in bytes
+
+def check_size(path): #create function to check if folder size is greater than max
     #this is setup to refresh the status every 10 requests and if the folder is full to remeber that and not continue checking. This is done to limit read cycles and processing time.
     global size_max, size_status  #make relevant variables global
     if size_status == 0: #if status is mode 0 dont attempt to check size again, we already know it's full
         return False
-    elif size_status == 1: #if the size check counter has tickesd down to zero, check the folder size and reset the counter
-        size = 0 #intialize/reset size variable
-        for n in os.scandir(dest): #for every item in the directory do the following
-            size = size+os.path.getsize(n) #add the size of the file to size
+    elif size_status == 1: #if the size check counter has tickesd down to 1, check the folder size and reset the counter
+        size = check_folder_size(path)
         if size < size_max: #if size is greater than max size (ie. has space for more files)
+            size_status = size_check_reset #reset the size check counter
             return True
-            size_status = 10 #reset the size check counter
         else: #if the folder is full
             size_status = 0 #set the size status to code 0 (save that the folder is full and stop attempting to read it)
             return False
     elif size_status > 1: #if the counter is not at 1, we need to wait longer until checking again
         size_status = size_status-1 #iterate the counter by -1
-        return True
+        return True #allow it to write to the folder
     
 def config_write(line,text): #create function to write over a line in config file (arguments:line number to write to, text/number to write)
     lines[line] = str(text)+"\n" #save new text to sepcified entry in "lines" array
@@ -593,25 +604,25 @@ def keyboard(arg): #define code to open/close/toggle the keyboard
     else: #if an unspecified argument is entered
         print("keyboard: invalid argument") #print an error
 
-def set_control(name): #define code to set the control image as the last image analyzed (acceptable arguments:"full","empty") 
+def set_control(name): #define code to set the control image as the current candidate image (acceptable arguments:"full","empty") 
     global full_ctrl, empty_ctrl #make full_ctrl and empty_ctrl global so they can be written to
     print("resetting "+name) #print status message
     try: #attempt to do the following
-        os.remove(comp_path+name+"_ctrl.jpg") #delete the current control
+        os.remove(comp_path+name+"_ctrl.jpg") #delete the current control image
     except: #upon failure do the following (will fail if no image is present)
         pass #do nothing
     #save the control candidate as the control jpg and update windows containing the control images
     if name == "full": #if name is "full"
         full_ctrl_candidate.save(comparison_folder+"/compare_"+name+"_ctrl.jpg") #save the full control candidate
         full_ctrl = full_ctrl_candidate #write over the current control with the candidate
-        global pid
+        global pid #make picture ID global so it can be written to
         drawing.delete(pid) #delete the masking window copy of the full control
-        pid = drawing.image(0,0,image=comparison_folder+"/compare_full_ctrl.jpg", width = res[0], height = res[1]) #update the masking window image with the new control
-        full_pic.image = comp_path+name+"_ctrl.jpg" #update the preview image
+        pid = drawing.image(0,0,image=full_ctrl, width = res[0], height = res[1]) #update the masking window image with the new control
+        full_pic.image = full_ctrl
     elif name == "empty": #if name is "empty"
         empty_ctrl_candidate.save(comparison_folder+"/compare_"+name+"_ctrl.jpg") #save the empty control candidate
-        empty_pic.image = comp_path+name+"_ctrl.jpg" #update the preview image
         empty_ctrl = empty_ctrl_candidate #write over the current control with the candidate
+        empty_pic.image = empty_ctrl #update the preview image
 
 def refresh_mask_preview(): #define code to generate and save the mask preview for use in the mask tool and archive
     global mask, current_mask
@@ -889,3 +900,4 @@ with picamera.PiCamera() as camera: #start up the camera
     print('Setup time: {} seconds'.format(setup_time)) #display the setup making time
      
     app.display() #push everything
+

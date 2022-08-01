@@ -7,7 +7,7 @@ import argparse
 
 #define file paths/defaults
 base_folder = "/home/pi/Desktop/main_emulated"
-source_path = base_folder+"/output/" #define path to send
+source_path = base_folder+"/output" #define path to send
 destination_path = "/home/pi/Desktop/recieve" #define where to send to 
 server_ip = "192.168.0.159" #define who to send to (default)
 image_path = source_path+"images/" #define image folder location
@@ -28,6 +28,15 @@ sleep_time = 0.1 #time in seconds between file checks, increase to lower resourc
 size = 0 #intialize size variable
 elapsed_time = 0 #initialize elapsed time
 
+def check_folder_size(path): #define code to get the size of a folder
+    size = 0 #intialize size counter
+    for entry in os.scandir(path): #for every entry in the specified path do the following
+        if entry.is_file(): #if it is a file
+            size = size+os.path.getsize(entry) #add the file size to the total size
+        elif entry.is_dir(): #if it is a folder
+            size = size+check_folder_size(entry.path) #get the size of the contents of the folder and add them to the total
+    return size #return the folder size in bytes
+
 #grab the client IP
 client_ip = subprocess.getoutput('hostname -I').rstrip() #grab the client ip and write it to client_ip
 
@@ -37,10 +46,8 @@ try:
 except: #on fail
     pass #do nothing
 
-#get image folder size
-for n in os.scandir(image_path): #for every item in the directory do the following
-    size = size+os.path.getsize(n) #add the size of the file to size
-
+size = check_folder_size(source_path) #run check folder size function and save folder size to size
+print(size)
 #write the folder size to the client reciept
 rec = open(client_receipt_path, 'w') #open the client receipt in write mode
 writer = csv.writer(rec) #build a writer
@@ -50,13 +57,15 @@ rec.close() #close/save the cient receipt
 
 #transmit
 try: #try the following
-    subprocess.check_output(["scp","-r",source_path, "pi@"+server_ip+":"+destination_path])#send entire source folder
+    subprocess.check_output(["scp","-r",client_receipt_path, "pi@"+server_ip+":"+destination_path])#send the client receipt
 except subprocess.CalledProcessError: #upon an error (no route to host)
     #Print Error and terminate once closed
     notif = App(title="Status", width = 400, height = 150) #create the main application window
     text = Text(notif, text="Unable to find Server\n\nThe error may be cause by the following:\n-Either server or client are not connected to internet\n-Specified server IP is incorrect") #create notification text
     button = PushButton(notif, command=quit, text="OK") #press ok button to close the program
     notif.display() #intialize the gui
+
+subprocess.check_output(["scp","-r",source_path, "pi@"+server_ip+":"+destination_path])#send entire source folder
 
 #check that server has responded
 start_time = time.time() #grab transmit start time
