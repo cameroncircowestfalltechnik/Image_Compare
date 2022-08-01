@@ -1,44 +1,39 @@
-# Predeployment copy is currently the most up to date version!!! Main emulated is depreceated!
+# Main is currently the most up to date version!
 # Image_Compare
 This is yet another look at the current state of the project. Below I will go over each file in the repo. This time around the system contains two Raspberry Pi's a client attached to the machine that is able to operate independently and a server that is currently just used for data archival.
 
 # Scripts
-### Main_Emulated.py
-This is the main program of the current config and lives on the client. It has two "daughter" programs that allow it to transmit to the server and restart properly but we'll go through those a little later. It is titled as emulated as I am currently emulating machine inputs with a button.  
+### Main.py
+This is the main program of the current config and lives on the client. It has two "daughter" programs that allow it to transmit to the server and restart properly but we'll go through those a little later.  
 The general flow of the program is the following:  
 -Startup and pull settings from config txt and write to the startup log  
--startup the camera and wait for the button to be pressed  
-  -On the first press it collects the control image  
-  -On the second press it collects the refrence image and runs processing  
-  -Interprets the processing output to either throw the alarm or not  
+-startup the camera and wait for the input signals  
+  -On mold open it collects an image of a mol dfull of parts then processes/analyzes it  
+  -After eject fire it waits a moment and then takes a picture of the empty mold then processes/analyzes it  
+  -Interprets the processing output and decides to either throw the alarm or not  
 -Simultaneously it maintins a GUI capable of the following:  
   -Changing the camera/analysis settings behind a password protected window  
   -Save the settings to the config file  
-  -See help as to how to operate the system  
-  -Emulate alarm/alarm reset  
-  -Transmit the files  
+  -Genearate an image mask to specify regions to check for discrepencies  
+  -See help on how to operate the system  
+  -Grant alarm access
+  -Transmit files  
   -Reset the password  
-  -open/close a touchscreen keyboard  
+  -Open/close a touchscreen keyboard  
+  -View and reset both control images  
  I recommend going through the code line by line for exact detail as I commented just about every line
  
-### Main_Emulated_Startup.py
+### Main_Startup.py
  This program allows the main script to restart itself. I encountered an issue where the program could start a new iteration of itself but would never close the old one. This would lead to a memory leak. As such this program is designed to attempt to close the main program and then launches it. Finally, the main program attempts to stop this program on its startup. This program is intended to be run on client startup.  
 
-### Main_Emulated_Transmit.py
+### Main_Transmit.py
 This program is designed to transmit the the log files and output images to the server via SCP. From there it deletes the output images to save storage on the client. Additionally, this script is designed to wait for a receipt from the server or will timeout after a designated time as to designate to the operator whether or not files have been recieved by the server. This can also accept an optional argument to override the default server ip.  
 
 ### file_recieve_reply.py
 This program is hosted on the server and checks for the reception of the client receipt. Upon its arrival it checks the receipt for the incoming image folder size as well as client IP. From there it waits for the image folder it is recieveing to be the same size as designated by the receipt. Once the whole folder is transfered, this script sends the server receipt. From here the script saves a copy of the images to the processing folder to be interpretted later and another copy to the archive for the current day of the week. Finally, it clears the reception folder. This program is intended to be run on startup of the server and will eventually be configured to loop forever.  
-### predeployment_copy.py
-This is currently the main program it has the same fetaures listed for main_emulated with the following changes:  
-  -Changed I/O to feature digitial input/output for alarm signals and mold status.  
-  -Changed workflow of image capture to be inline with actual use case. Ie. a single control image is maintained for each state as opposed to taking a new one every time.  
-  -More advanced image processing for removing noise and reflections on other areas.  
-  -Added Gui elements to rest and view the control images as well as toggle access to alarms.  
-  -File transmission to the server is currently disabled as the server is not deployed.  
-  
+
 ### Wiring_Check.py  
-This program is meant to check the wiring of the optocouplers and test the I/O. It presents a window that allows you to send the alarm and reset signals and displays the mold open and ejector fire signals. Additionally it writes the input signals to the termianl with a timestamp for more detail.  
+This program is meant to check the wiring of the relay and test the I/O. It presents a window that allows you to send the alarm and reset signals and displays the mold open and ejector fire signals. Additionally it writes the input signals to the termianl with a timestamp for more detail.  
 
 # Files 
 ### config.txt
