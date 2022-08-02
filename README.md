@@ -19,7 +19,7 @@ The general flow of the program is the following:
   -Grant alarm access
   -Transmit files  
   -Reset the password  
-  -Open/close a touchscreen keyboard  
+  -Open/close a touchscreen keyboard ([See this tutorial for setup](https://ozzmaker.com/virtual-keyboard-for-the-raspberry-pi/))  
   -View and reset both control images  
  I recommend going through the code line by line for exact detail as I commented just about every line
  
