@@ -29,27 +29,17 @@ comparison_folder = base_folder+"/comparison_images"
 output_folder = base_folder+"/output"
 log_path = output_folder+"/log.csv" #specify log location
 startup_log_path = output_folder+"/startup_log.csv" #specify startup log location
-image_path = output_folder+"/images/" #specify output image path
+image_folder = output_folder+"/images/"
 fail_folder = output_folder+"/fail/"
 mask_archive = output_folder+"/mask_archive/"
 comp_path = comparison_folder+"/compare_" #specify image file location
 
 #kill the startup program
-prog_id = None
 try: #attempt the following
-    prog_id = subprocess.check_output(['pidof', 'matchbox-keyboard']) #read the program id of the keyboard
-    prog_id = int(prog_id) #convert the id to an interger in order to remove superfluous text
-    print(prog_id)
-    subprocess.run(['kill', str(prog_id)]) #kill a program with the program id we grabbed above
-except subprocess.CalledProcessError: #if an error is returned (the program id is not found and thus not running)
-    pass
-
-
-# try: #attempt the following
-#     os.system("cd /home/pi/Desktop") #navigate to program location (probably redundant)
-#     os.system("\n pkill Main_Emulated_Startup.py") #kill the startup script-
-# except: #upon fail (likely indicating this program was started without the startup prgram being run
-#     pass #do nothing
+    os.system("cd /home/pi/Desktop") #navigate to program location (probably redundant)
+    os.system("\n pkill Main_Emulated_Startup.py") #kill the startup script-
+except: #upon fail (likely indicating this program was started without the startup prgram being run
+    pass #do nothing
 
 #intialize/write some variables
 good = True #create variable to hold pass/fail status
@@ -173,7 +163,7 @@ def capture(name): #possible inputs "full" "empty" "test"
         #print("No object detected") #say an object was not detected
         good = True #designate as good/pass
         #reset_alarm()
-
+            
     process_end = time.time() #stop the timer
     process_time = process_end - process_start #calculate elapsed time since processing start
     #print('Process time: {} seconds'.format(process_time)) #display the image processing time
@@ -220,16 +210,18 @@ def capture(name): #possible inputs "full" "empty" "test"
         return #finish running the function
     
     #the code should only be able to execute the following if "name" is full or empty
-    if check_size(image_path): #if the image folder enough space
-        result.save(image_path+tim+"_"+name+".jpg") #save results as a jpg with the current date and time
+    if check_size(output_folder): #if the image folder enough space
+        result.save(image_folder+tim+"_"+name+".jpg") #save results as a jpg with the current date and time
         folder_has_space = True
     else:
         print("output folder full, not saving image")
         folder_has_space = False            
     if good == True: #if the image passed
             set_control(name) #reset the control
+            app.bg = "light grey" #reset the background color
     else: #if the image failed
         if folder_has_space == True: #if the image folder enough space
+            control.save(fail_folder+tim+"_"+name+"_ctrl.jpg") #save the control to the fail folder
             candidate.save(fail_folder+tim+"_"+name+"_raw.jpg") #save the raw image to the fail folder
             result.save(fail_folder+tim+"_"+name+".jpg") #save a copy of the results to the fail folder
             
@@ -269,7 +261,6 @@ def empty_ctrl_focus(): #define code to open/focus the empty control window
 def reset_alarm(): #define code to reset the alarm
     print("Alarm Reset") #placeholder: print text
     app.bg = "light grey"
-    if alarm_access:alarm_reset_pin.blink(on_time=0.1,n=1) #make the alarm line "blink" for 0.1s once
     
 def simulate_alarm(): #define the code to simulate the alarm
     app.bg = 'tomato' #set app color to red
@@ -614,6 +605,7 @@ def keyboard(arg): #define code to open/close/toggle the keyboard
 
 def set_control(name): #define code to set the control image as the current candidate image (acceptable arguments:"full","empty") 
     global full_ctrl, empty_ctrl #make full_ctrl and empty_ctrl global so they can be written to
+    app.bg = "light grey" #reset the background color
     print("resetting "+name) #print status message
     try: #attempt to do the following
         os.remove(comp_path+name+"_ctrl.jpg") #delete the current control image
@@ -753,24 +745,24 @@ with picamera.PiCamera() as camera: #start up the camera
     empty_pic_close = PushButton(empty_preview, command=empty_preview.hide, text="Close",width=10, height=3) #add close button
     
     #setup main window-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-    row_pic = Box(app, width=1800, height=500, align='top') #create a container for the images. call it row_pic
-    pic_full = Picture(row_pic, image="/home/pi/Desktop/main_emulated/menu_image.jpg", align='left') #create picture widget to show the mold open image
-    pic_empty = Picture(row_pic, image="/home/pi/Desktop/main_emulated/menu_image.jpg", align='right') #create picture widget to show the ejector fire image
-    row1 = Box(app, width=300, height=75, align='bottom') #create a container for the reset and alarm buttons. call it row1
-    reset_button = PushButton(row1, command=reset_alarm, text="Reset", align='left', height="fill", width="fill") #define reset button widget
-    sim_button = PushButton(row1, command=simulate_alarm, text="Simulate Alarm", align='right', height="fill", width="fill") #define settings button widget
-    row2 = Box(app, width=400, height=75, align='bottom') #create a container for the control set buttons, call it row2
-    ctrl_set_full = PushButton(row2, command=lambda: set_control("full"), text="Reset Full Control", align='left', height="fill", width="fill")
-    ctrl_set_empty = PushButton(row2, command=lambda: set_control("empty"), text="Reset Empty Control", align='right', height="fill", width="fill")
-    row3 = Box(app, width=420, height=75, align='bottom') #create a container for the control preview buttons, call it row3
-    empty_ctrl_preview = PushButton(row3, command=empty_ctrl_focus, text="Preview Empty Control", align='right', height="fill", width="fill")
-    full_ctrl_preview = PushButton(row3, command=full_ctrl_focus, text="Preview Full Control", align='left', height="fill", width="fill")
-    row4 = Box(app, width=340, height=75, align='bottom') #create a container for the control preview buttons, call it row3
-    settings_button = PushButton(row4, command=request_settings, text="Settings", align='left', height="fill", width="fill") #define settings button widget
-    alarm_lock = PushButton(row4, command=toggle_alarm_access, text="Alarm access is "+str(alarm_access), align='right', height="fill", width="fill") #define settings button widget
-    row0 = Box(app, width=330, height=75, align='bottom') #create a container for the reset and alarm buttons. call it row0
-    sim_eject = PushButton(row0, command=lambda: capture("empty"), text="Simulate Eject", align='right', height="fill", width="fill") #define settings button widget
-    sim_open = PushButton(row0, command=lambda: capture("full"), text="Simulate Open", align='left', height="fill", width="fill") #define settings button widget
+    row_1 = Box(app, width=res[0]*2, height=res[1], align='top') #create a container for the images. call it row_0
+    pic_full = Picture(row_1, image="/home/pi/Desktop/main_emulated/menu_image.jpg", align='left') #create picture widget to show the mold open image
+    pic_empty = Picture(row_1, image="/home/pi/Desktop/main_emulated/menu_image.jpg", align='right') #create picture widget to show the ejector fire image
+    row_2 = Box(app, width=300, height=75, align='bottom') #create a container for the reset and simulate alarm buttons. call it row_2
+    reset_button = PushButton(row_2, command=reset_alarm, text="Reset", align='left', height="fill", width="fill") #define reset button widget
+    sim_button = PushButton(row_2, command=simulate_alarm, text="Simulate Alarm", align='right', height="fill", width="fill") #define settings button widget
+    row_3 = Box(app, width=400, height=75, align='bottom') #create a container for the control set buttons, call it row_3
+    ctrl_set_full = PushButton(row_3, command=lambda: set_control("full"), text="Reset Full Control", align='left', height="fill", width="fill")
+    ctrl_set_empty = PushButton(row_3, command=lambda: set_control("empty"), text="Reset Empty Control", align='right', height="fill", width="fill")
+    row_4 = Box(app, width=420, height=75, align='bottom') #create a container for the control preview buttons, call it row_4
+    empty_ctrl_preview = PushButton(row_4, command=empty_ctrl_focus, text="Preview Empty Control", align='right', height="fill", width="fill")
+    full_ctrl_preview = PushButton(row_4, command=full_ctrl_focus, text="Preview Full Control", align='left', height="fill", width="fill")
+    row_5 = Box(app, width=340, height=75, align='bottom') #create a container for the settings and alarm lockout buttons, call it row_5
+    settings_button = PushButton(row_5, command=request_settings, text="Settings", align='left', height="fill", width="fill") #define settings button widget
+    alarm_lock = PushButton(row_5, command=toggle_alarm_access, text="Alarm access is "+str(alarm_access), align='right', height="fill", width="fill") #define settings button widget
+    row_6 = Box(app, width=330, height=75, align='bottom') #create a container for the signal simulation buttons. call it row_6
+    sim_eject = PushButton(row_6, command=lambda: capture("empty"), text="Simulate Eject", align='right', height="fill", width="fill") #define settings button widget
+    sim_open = PushButton(row_6, command=lambda: capture("full"), text="Simulate Open", align='left', height="fill", width="fill") #define settings button widget
     mask_button = PushButton(app, command=launch_mask_tool, text="Masking Tool", align='bottom', height="3", width="20") #define settings button widget
     pic_full.repeat(1, check_signals) #attach repeat widget to the picture widget to run "check_signals" every 1ms
     
