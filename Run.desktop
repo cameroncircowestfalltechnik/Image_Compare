@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Encoding= UTF-8
+Name= Click me to start
+Exec=/usr/bin/python /home/pi/Desktop/Main.py
+Terminal=true
