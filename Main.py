@@ -12,6 +12,7 @@ from gpiozero import DigitalInputDevice, DigitalOutputDevice
 
 #setup-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 setup_start = time.time() #start startup timer
+print("Program starting. Please wait")
 #I/O Setup
 mold_open = DigitalInputDevice(4) #assign input pin (GPIO4 or Pin 7) to mold open signal
 ejector_fire = DigitalInputDevice(17) #assign input pin (GPIO17 or Pin 11) to ejector fire signal
@@ -714,7 +715,6 @@ with picamera.PiCamera() as camera: #start up the camera
     #start camera stream
     stream = picamera.PiCameraCircularIO(camera, seconds=1) #generate a camera stream in which the camera retains 1 second of footage
     camera.start_recording(stream, format='h264') #start recording to the stream
-    camera.wait_recording(0.25) #allow the camera to run a second to allow it to autofocus
     
     #create windows
     #app = App(title='main', layout='auto', width = 1700, height = 800) #create the main application window as a small window
