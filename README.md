@@ -42,7 +42,8 @@ This is a sample of my current config file. It stores the following in this orde
 This is the receipt the server sends to the client. It has not contents and more or less acts as a way for the transmit script to check for a file sent from the server. This could be a good way for the server to send back some info similar to the client receipt discussed below.  
 ### start.desktop
 I followed [this tutorial](https://learn.sparkfun.com/tutorials/how-to-run-a-raspberry-pi-program-on-startup/method-2-autostart) on setting up programs to run on boot with a GUI. Currently, in my system, its destination folder is /home/pi/.config/autostart. On the pi the file is called "prog" not "start" but this is likely a difference in raspbian vs windows choosing how to display as "prog" is defined in the contents of the file. In the current setup in just launches predeployment_copy.py but in the main deployment will run Main_Emulated_Startup.py.  
-
+### run.desktop  
+I followed [this tutorial](https://www.hackster.io/kamal-khan/desktop-shortcut-for-python-script-on-raspberry-pi-fd1c63) on setting up executables for programs. This is meant to live on the desktop screen and acts as a shortcut to startup Main.py if operators accidentally close the program. I recommend enabling "Don't ask options on launch executable file" under Edit->Prefrences->General in the raspbian file explorer.  
 
 # main_emulated folder
 This is a sample of all the folders that the client programs use. It shows some samples of outputs as well as demonstrates the layout of the file system. Additionally, an images folder will be present here of all the images displayed in the GUI for archival.  
