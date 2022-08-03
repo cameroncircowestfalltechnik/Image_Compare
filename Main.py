@@ -1,5 +1,5 @@
 # #!/usr/bin/python #uncomment to designate the program as executable
-from PIL import Image, ImageOps, ImageChops, ImageEnhance, ImageDraw, ImageFilter, ImageTk
+from PIL import Image, ImageOps, ImageChops, ImageEnhance, ImageDraw, ImageFilter, ImageTk, ImageStat
 from guizero import App,Text,TextBox,PushButton,Picture,question,Window,Combo,info,Box,Drawing
 import time
 import os
@@ -59,6 +59,7 @@ mold_open_old = 1 #intialize the mold open last status
 eject_fire_old = 1 #initialize ejector fire last status
 full_score = None #intialize full score
 full_pass = None #initialize full pass/fail
+full_factor = None #intialize full brightness factor(debug)
 max_score = None #intialize max score value
 x1, y1 = None, None #intialize starting coords of masking tool
 tim = time.asctime() #intitizlize current time variable for capture sequence and to save the image mask
@@ -105,7 +106,7 @@ startup_log.close() #close the startup log (auto saves new data)
 #The Camera Zone------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #capture and process the image
 def capture(name): #possible inputs "full" "empty" "test"
-    global full_score, full_pass, full_ctrl, empty_ctrl, max_score, tim, full_ctrl_candidate, empty_ctrl_candidate
+    global full_score, full_pass, full_ctrl, empty_ctrl, max_score, tim, full_ctrl_candidate, empty_ctrl_candidate, full_factor
     cap_start = time.time() #start image capture timer
     
     #take picture
@@ -131,6 +132,26 @@ def capture(name): #possible inputs "full" "empty" "test"
     elif name == "test":
         control = full_ctrl #set the main control to the full control
         comp = empty_ctrl
+        
+    #compensate for a difference in brightness
+    comp_bw = comp.convert("L") #make black and white copy of comparison image
+    control_bw = control.convert("L") #make b&w copy of control
+    stat = ImageStat.Stat(comp_bw) #get image stats of b&w comparison
+    comp_brightness = stat.mean[0] #average the color (this gives the image brightness)
+    stat = ImageStat.Stat(control_bw) #get image stats of b&w control
+    control_brightness = stat.mean[0] #average the color (this gives the image brightness)
+    
+    if comp_brightness > control_brightness: #if comparison image is brighter
+        factor = comp_brightness/control_brightness #calculate the brightness factor (will be >1)
+        print("Factor:"+str(factor)) #print the brightness factor
+        enhancer = ImageEnhance.Brightness(control) #Say we want to change the brightness of the control
+        control = enhancer.enhance(factor) #increase the control brightness by our brightness factor
+    
+    elif comp_brightness < control_brightness: #if the control is brighter
+        factor = control_brightness/comp_brightness #calculate the brightness factor (will be >1)
+        print("Factor:"+str(factor))  #print the brightness factor
+        enhancer = ImageEnhance.Brightness(comp) #Say we want to change the brightness of the comparison image
+        comp = enhancer.enhance(factor) #increase the comparison brightness by our brightness factor
     
     #find the difference in the images and apply the image mask
     diff = ImageChops.difference(control, comp) #find difference between images and name it "diff" or difference
@@ -141,7 +162,7 @@ def capture(name): #possible inputs "full" "empty" "test"
     diff = diff.point( lambda p: 255 if p > 255/sens else 0) #Make all pixels below the defined threshold black and all above white
     
     #analyze the difference and do something with the results
-    tot = np.sum(np.array(diff)/255) #convert diff to an array and find the elementwise sum, call it tot for "total". This represents the quantity of pixels that are different
+    tot = int(np.sum(np.array(diff)/255)) #convert diff to an array and find the elementwise sum, call it tot for "total". This represents the quantity of pixels that are different
     print('Score: '+str(tot)) #print the "total"
     if (tot > thresh) and (name != "test") and (tot < max_score): #if the total number of diffent pixels are more than the defined threshold and we are not doing the max score test do the following:
         #print("Object detected") #say an object was detected
@@ -184,11 +205,12 @@ def capture(name): #possible inputs "full" "empty" "test"
         full_score = tot #save the score
         full_pass = good #save the pass/fail
         full_ctrl_candidate = candidate #update the current control candidate (basically copy the image so that it can write over the current control if desired
+        full_factor = factor #save brightness factor (debug)
     elif name == "empty":
         pic_empty.image = result #send results to the picture widget on the main page
         empty_ctrl_candidate = candidate #update the current control candidate   
         #write the the data from empty and close to a line in the log (run at the end of ejector fire as that will ALWAYS happen after mold open)
-        log.write(tim+","+str(full_score)+","+str(full_pass)+","+str(tot)+","+str(good)+"\n") #write time, score, and pass/fail to log
+        log.write(tim+","+str(full_score)+","+str(full_pass)+","+str(round(full_factor,3))+","+str(tot)+","+str(good)+","+str(round(factor,3))+"\n") #write time, score, and pass/fail to log
         log.flush()#save it
         
     elif name == "test": #if we are running a full test (compare full image to empty to calculate the highest possible score. anything above this score is a mistimed image
@@ -600,9 +622,6 @@ def set_control(name): #define code to set the control image as the current cand
     if name == "full": #if name is "full"
         full_ctrl_candidate.save(comparison_folder+"/compare_"+name+"_ctrl.jpg") #save the full control candidate
         full_ctrl = full_ctrl_candidate #write over the current control with the candidate
-        global pid #make picture ID global so it can be written to
-        drawing.delete(pid) #delete the masking window copy of the full control
-        pid = drawing.image(0,0,image=full_ctrl, width = res[0], height = res[1]) #update the masking window image with the new control
         full_pic.image = full_ctrl
     elif name == "empty": #if name is "empty"
         empty_ctrl_candidate.save(comparison_folder+"/compare_"+name+"_ctrl.jpg") #save the empty control candidate
@@ -623,7 +642,14 @@ def refresh_mask_preview(): #define code to generate and save the mask preview f
 def launch_mask_tool(): #define code to launch masking tool window
     global pid #make picture id global
     drawing.delete(pid) #delete the current image in the window
-    pid = drawing.image(0,0,image=comparison_folder+"/compare_full_ctrl.jpg", width = res[0], height = res[1]) #add the image back in and save pic id to pid
+    try:
+        drawing.delete(pid)
+        kill_all()
+        pid = drawing.image(0,0,image=full_ctrl, width = res[0], height = res[1]) #update the masking window image with the new control
+    except:
+        pass
+    else:
+        pid = drawing.image(0,0,image=comparison_folder+"/compare_full_ctrl.jpg", width = res[0], height = res[1]) #add the image back in and save pic id to pid
     mask_win.show() #make the mask tool window visible
     
 def toggle_mode(): #define code to toggle polygon mode on/off
@@ -694,7 +720,12 @@ def request_mask_help(): #define what to do when help is requested in the maskin
     help_info = mask_win.info("Help", "Use this window to drag a box or polygon around the region to examine. Areas covered in green will be processed. Use kill last mask to delete the last drawng or the kill all masks button to dleete all of them and start over. Press the mode button to toggle between rectanlge mode and polygon mode. Dont forget to save the mask before closing. Finally, use the prevview button to view the current mask.") #create a popup with helpful text
 
 def save_mask():
+    global mask_img, msk
     mask_img.save(comparison_folder+"/mask.jpg") #saves PIL image built above as a jpg
+    #reset the PIL Canvas
+    mask_img = Image.new("1", res) #create PIL image in mode "1" (one channel, 1 bit per pixel b&w) with the same dimensions as the capture resolution
+    msk = ImageDraw.Draw(mask_img) #make it so the image can be drawn on (create a container called msk)
+    kill_all()#reset drawings
     refresh_mask_preview()
     mask_pic.image = output_folder+"/mask_preview.jpg"
 
@@ -756,7 +787,7 @@ pic_full.repeat(1, check_signals) #attach repeat widget to the picture widget to
 mask_img = Image.new("1", res) #create PIL image in mode "1" (one channel, 1 bit per pixel b&w) with the same dimensions as the capture resolution
 msk = ImageDraw.Draw(mask_img) #make it so the image can be drawn on (create a container called msk)
 
-drawing = Drawing(mask_win,"fill","fill") #create drawing widget that fills the window
+drawing = Drawing(mask_win,res[0],res[1]) #create drawing widget that fills the window
 pid = drawing.image(0,0,image=comparison_folder+"/compare_full_ctrl.jpg", width = res[0], height = res[1]) #add the current control image to the drawing widget
 mask_row1 = Box(mask_win, width=250, height=75, align='bottom') #create a container
 PushButton(mask_row1, command=show_current_mask, text="Show Current Mask", align='left',height="fill",width="fill") #create a button to display the current mask
@@ -900,3 +931,4 @@ setup_time = setup_end - setup_start #calculate elapsed time since setup start
 print('Setup time: {} seconds'.format(setup_time)) #display the setup making time
  
 app.display() #push everything
+
