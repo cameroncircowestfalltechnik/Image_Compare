@@ -17,7 +17,6 @@ print("Program starting. Please wait")
 mold_open = DigitalInputDevice(4) #assign input pin (GPIO4 or Pin 7) to mold open signal
 ejector_fire = DigitalInputDevice(17) #assign input pin (GPIO17 or Pin 11) to ejector fire signal
 alarm_pin = DigitalOutputDevice(27) #assign output pin (GPIO27 or pin12) to alarm signal
-alarm_reset_pin = DigitalOutputDevice(23) #assign output pin (GPIO23 or pin 16) to alarm reset signal
 alarm_button = DigitalInputDevice(22) #assign input pin (GPIO22 or pin 15) to alarm reset button
 
 #file path setup
@@ -40,6 +39,7 @@ except: #upon fail (likely indicating this program was started without the start
     pass #do nothing
 
 #intialize/write some variables
+is_first_full, is_first_empty = True,True #intialize the first fire status as true (the first time it fires a signal it will know it is the first time)
 good = True #create variable to hold pass/fail status
 n = 0 #startup image counter
 res_max = (3280, 2464) #define the max camera resolution
@@ -47,7 +47,6 @@ res_max = (3280, 2464) #define the max camera resolution
 display_width = 1920 #define display width
 display_height = 1080 #define display height
 size_max = 5000000000 #set max output folder size (currently 5 GB)
-#size_max = 24645369+(54860*5)
 size_status = 1 #create a interger to count how many times the size has been checked and maintain its status
 size_check_reset = 10 #define how many times to request a folder check before actually running
 alarm_access = False #intialize Alarm lockout
@@ -81,7 +80,7 @@ log = open(log_path, "a") #open log csv file in "append mode"
 if os.stat(log_path).st_size == 0:#if the csv file is empty do the following
     log.write("Timestamp,Score,Pass?\n") #Rebuild column labels 
     log.flush() #save text
-    
+
 #grab current config settings
 with open(config_path,'r') as f: #open the config file
     lines = f.readlines() #write line by line to "lines"
@@ -217,15 +216,15 @@ def capture(name): #possible inputs "full" "empty" "test"
         max_score = 0.9*int(tot) #update the internal max score (multiply by 0.9 so that values that are close can still trigger as misfire)
         print("Max Score: "+str(max_score)) #print the highest possible score
         config_write(12,max_score) #save to config file
-        return #finish running the function
+        return #leave the function
     elif name == "empty misfire": #if the current capture is an empty misfire
         pic_empty.image = result #refresh the main page image
         empty_ctrl_candidate = candidate #update the current control candidate anyway, we may need to set this as the new control anyway
-        return #finish running the function
+        #return #leave the function
     elif name == "full misfire": #if the current capture is a sull misfire
         pic_full.image = result #refresh the main page image
         full_ctrl_candidate = candidate #update the current control candidate anyway, we may need to set this as the new control anyway
-        return #finish running the function
+        #return #leave the function
     
     #the code should only be able to execute the following if "name" is full or empty
     if check_size(output_folder): #if the image folder enough space
@@ -537,7 +536,7 @@ def config_write(line,text): #create function to write over a line in config fil
         f.writelines(lines) #write the lines array to it
     
 def check_signals(): #define code to check the signals
-    global mold_open_old, eject_fire_old #import signal last statuses
+    global mold_open_old, eject_fire_old, is_first_full, is_first_empty #import signal last statuses and first fire status
     t = time.localtime() #grab the current time
     current_time = (str(t[3])+":"+str(t[4])+":"+str(t[5])) #format it as a (hour:minute:second)
     
@@ -545,14 +544,22 @@ def check_signals(): #define code to check the signals
         print("") #add an empty line
         print(current_time +": mold open, checking if full") #report signal status
         time.sleep(open_delay)
-        capture("full") #run processing for full mold
+        if is_first_full == True:
+            print("ignoring first")
+            is_first_full = False
+        else:
+            capture("full") #run processing for full mold
     mold_open_old = mold_open.value #update mold open last status
     
     if (ejector_fire.value == 1) and (eject_fire_old == 0): #if the mold open signal line is on and the last time we checked it was off
         print("") #add an empty line
         print(current_time +": ejector fire, checking if empty") #report signal status
         time.sleep(eject_delay) #wait 200ms for parts to fall out of frame. TO DO: drive via settings
-        capture("empty") #run processing for empty mold
+        if is_first_empty == True:
+            print("ignoring first")
+            is_first_empty = False
+        else:
+            capture("empty") #run processing for empty mold
     eject_fire_old = ejector_fire.value #update ejector fire last status
 
 def toggle_alarm_access(): #define code to toggle alarm lockout
@@ -805,7 +812,7 @@ drawing.when_mouse_dragged = drag #check for the mouse to drag
 drawing.when_left_button_released = finish #checks for left click release
 
 #create mask preview window
-mask_preview = Window(mask_win, title="full preview", width=800, height=600, visible=False) #create a mask preview window
+mask_preview = Window(mask_win, title="full preview", width=900, height=600, visible=False) #create a mask preview window
 mask_pic = Picture(mask_preview, image=current_mask) #add the current mask as an image
 PushButton(mask_preview, command=mask_preview.hide, text="Close",width=10,height=3) #add close button
 #Password Entry Window------------------------------------------------------------------------------------------------------------------------------------------
@@ -931,4 +938,5 @@ setup_time = setup_end - setup_start #calculate elapsed time since setup start
 print('Setup time: {} seconds'.format(setup_time)) #display the setup making time
  
 app.display() #push everything
+
 
