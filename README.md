@@ -55,7 +55,7 @@ This is a copy of the log but with no data present. It is used by transmit to wi
 ### startup_log.csv
 This log is written to once on every startup, it tracks the startup time and settings upon startup. This one is also formatted to it should be pretty self explanitory when viewed in github.  
 ### config.txt
-This is a sample of my current config file. It stores the following in this order, password, ISO, shutter speed, camera mode, image width, image height, image rotation, image detection threshold, sensitivity, mold open delay, ejector fire delay and the max score so that it can be written to the startup log. 
+This is a sample of my current config file. It stores the following in this order, password, ISO, shutter speed, camera mode, image width, image height, image rotation, image detection threshold, sensitivity, mold open delay, and ejector fire delay. 
 ### menu_image.jpg
 This is a sample image that is used as the first image to be displayed when the client programs are launched. It stands as a placeholder until the program processes and displays a new image.  
 ### mask_preview.jpg  
