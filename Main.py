@@ -1,12 +1,11 @@
 # #!/usr/bin/python #uncomment to designate the program as executable
-from PIL import Image, ImageOps, ImageChops, ImageEnhance, ImageDraw, ImageFilter, ImageTk, ImageStat
-from guizero import App,Text,TextBox,PushButton,Picture,question,Window,Combo,info,Box,Drawing
+from PIL import Image, ImageOps, ImageChops, ImageEnhance, ImageDraw, ImageFilter, ImageStat
+from guizero import App,Text,TextBox,PushButton,Picture,Window,Combo,Box,Drawing
 import time
 import os
 import picamera
 from io import BytesIO
 import numpy as np
-import matplotlib.pyplot as plt
 import subprocess
 from gpiozero import DigitalInputDevice, DigitalOutputDevice
 
@@ -20,7 +19,7 @@ alarm_pin = DigitalOutputDevice(27) #assign output pin (GPIO27 or pin12) to alar
 alarm_button = DigitalInputDevice(22) #assign input pin (GPIO22 or pin 15) to alarm reset button
 
 #file path setup
-base_folder = "/home/pi/Desktop/main_emulated"
+base_folder = "/home/pi/Desktop/Main"
 config_path = base_folder+"/config.txt" #define config file path
 comparison_folder = base_folder+"/comparison_images"
 output_folder = base_folder+"/output"
@@ -30,6 +29,7 @@ image_folder = output_folder+"/images/"
 fail_folder = output_folder+"/fail/"
 mask_archive = output_folder+"/mask_archive/"
 comp_path = comparison_folder+"/compare_" #specify image file location
+menu_image = base_folder+"/menu_image.jpg" #specify location of placeholder menu images
 
 #kill the startup program
 try: #attempt the following
@@ -41,15 +41,15 @@ except: #upon fail (likely indicating this program was started without the start
 #intialize/write some variables
 is_first_full, is_first_empty = True,True #intialize the first fire status as true (the first time it fires a signal it will know it is the first time)
 good = True #create variable to hold pass/fail status
-n = 0 #startup image counter
+full_qty, empty_qty = 0,0 #intialize image throwout counters
+throwout_qty = 3 #define how many images to throwout upon startup
 res_max = (3280, 2464) #define the max camera resolution
-#manually define display dimensions (maybe switch this to autodetect later)
 display_width = 1920 #define display width
 display_height = 1080 #define display height
 size_max = 5000000000 #set max output folder size (currently 5 GB)
 size_status = 1 #create a interger to count how many times the size has been checked and maintain its status
 size_check_reset = 10 #define how many times to request a folder check before actually running
-alarm_access = False #intialize Alarm lockout
+alarm_access = False #intialize Alarm lockout defaults to no access
 #server_ip = "192.168.0.159" #specify server IP
 did = [] #create empty list to store mask drawing ids (stores the ids of all drawings on the image)
 coords = [] #create empty list to store drawing coordinates
@@ -58,7 +58,6 @@ mold_open_old = 1 #intialize the mold open last status
 eject_fire_old = 1 #initialize ejector fire last status
 full_score = None #intialize full score
 full_pass = None #initialize full pass/fail
-full_factor = None #intialize full brightness factor(debug)
 max_score = None #intialize max score value
 x1, y1 = None, None #intialize starting coords of masking tool
 tim = time.asctime() #intitizlize current time variable for capture sequence and to save the image mask
@@ -104,33 +103,39 @@ startup_log.close() #close the startup log (auto saves new data)
 
 #The Camera Zone------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #capture and process the image
-def capture(name): #possible inputs "full" "empty" "test"
-    global full_score, full_pass, full_ctrl, empty_ctrl, max_score, tim, full_ctrl_candidate, empty_ctrl_candidate, full_factor
+def capture():
     cap_start = time.time() #start image capture timer
     
     #take picture
     stream = BytesIO() #create memory buffer to write images to
     camera.capture(stream, format='jpeg', use_video_port=True) #capture to the buffer
     stream.seek(0) #move to the first image captured
-    comp = Image.open(stream) #write the image to the PIL object "comp" or comparison
+    image = Image.open(stream) #write the image to the PIL object "comp" or comparison
     
     #finish timer
     cap_end = time.time() #stop the image capture time
     cap_time = cap_end - cap_start #calculate elapsed time
-    print('Capture "'+name+'" took: {} seconds'.format(round(cap_time,4))) #display it.
-    process_start = time.time() #start image processing timer
+    #print('Capture "'+name+'" took: {} seconds'.format(round(cap_time,4))) #display it.
+    print('Capture took: {} seconds'.format(round(cap_time,4))) #display it.
+    return image
     
-    #comp.save(comparison_folder+"/compare_"+name+".jpg") #save the full control candidate
+def process(name): #possible inputs "full" "empty" "calibrate_max"
+    global full_score, full_pass, full_ctrl, empty_ctrl, max_score, tim, full_ctrl_candidate, empty_ctrl_candidate
+    decision_start = time.time() #start image capture timer
+    
     #set the correct control image (ie. we are storing the respective controls as PIL images and we write to the "main" control named "control" based on which image we are capturing)
     if name == "full": #if the arg is "full"
         control = full_ctrl #set the main control to the full control
+        comp = capture()
         #comp = Image.open(comparison_folder+"/compare_full_edit.jpg") #manually overwrite image to load
     elif name == "empty": #if the arg is empty
         control = empty_ctrl #set the main control to the empty control
+        comp = capture()
         #comp = Image.open(comparison_folder+"/compare_empty_edit.jpg") #manually overwrite image to load
-    elif name == "test":
+    elif name == "calibrate_max":
         control = full_ctrl #set the main control to the full control
         comp = empty_ctrl
+    process_start = time.time() #start image processing timer
         
     #compensate for a difference in brightness
     comp_bw = comp.convert("L") #make black and white copy of comparison image
@@ -142,13 +147,11 @@ def capture(name): #possible inputs "full" "empty" "test"
     
     if comp_brightness > control_brightness: #if comparison image is brighter
         factor = comp_brightness/control_brightness #calculate the brightness factor (will be >1)
-        print("Factor:"+str(factor)) #print the brightness factor
         enhancer = ImageEnhance.Brightness(control) #Say we want to change the brightness of the control
         control = enhancer.enhance(factor) #increase the control brightness by our brightness factor
     
     elif comp_brightness < control_brightness: #if the control is brighter
         factor = control_brightness/comp_brightness #calculate the brightness factor (will be >1)
-        print("Factor:"+str(factor))  #print the brightness factor
         enhancer = ImageEnhance.Brightness(comp) #Say we want to change the brightness of the comparison image
         comp = enhancer.enhance(factor) #increase the comparison brightness by our brightness factor
     
@@ -163,7 +166,7 @@ def capture(name): #possible inputs "full" "empty" "test"
     #analyze the difference and do something with the results
     tot = int(np.sum(np.array(diff)/255)) #convert diff to an array and find the elementwise sum, call it tot for "total". This represents the quantity of pixels that are different
     print('Score: '+str(tot)) #print the "total"
-    if (tot > thresh) and (name != "test") and (tot < max_score): #if the total number of diffent pixels are more than the defined threshold and we are not doing the max score test do the following:
+    if (tot > thresh) and (name != "calibrate_max") and (tot < max_score): #if the total number of diffent pixels are more than the defined threshold and we are not doing the max score test do the following:
         #print("Object detected") #say an object was detected
         simulate_alarm()
         good = False #designate as not good/fail
@@ -183,7 +186,7 @@ def capture(name): #possible inputs "full" "empty" "test"
     process_end = time.time() #stop the timer
     process_time = process_end - process_start #calculate elapsed time since processing start
     #print('Process time: {} seconds'.format(process_time)) #display the image processing time
-    decision_time = process_end - cap_start #calculate elapsed time  since decision start
+    decision_time = process_end - decision_start #calculate elapsed time  since decision start
     print('Decision Time: {} seconds'.format(round(decision_time,4))) #display the decision making time
 
     #generate the output image
@@ -204,27 +207,26 @@ def capture(name): #possible inputs "full" "empty" "test"
         full_score = tot #save the score
         full_pass = good #save the pass/fail
         full_ctrl_candidate = candidate #update the current control candidate (basically copy the image so that it can write over the current control if desired
-        full_factor = factor #save brightness factor (debug)
     elif name == "empty":
         pic_empty.image = result #send results to the picture widget on the main page
         empty_ctrl_candidate = candidate #update the current control candidate   
         #write the the data from empty and close to a line in the log (run at the end of ejector fire as that will ALWAYS happen after mold open)
-        log.write(tim+","+str(full_score)+","+str(full_pass)+","+str(round(full_factor,3))+","+str(tot)+","+str(good)+","+str(round(factor,3))+"\n") #write time, score, and pass/fail to log
+        log.write(tim+","+str(full_score)+","+str(full_pass)+","+str(tot)+","+str(good)+"\n") #write time, score, and pass/fail to log
         log.flush()#save it
         
-    elif name == "test": #if we are running a full test (compare full image to empty to calculate the highest possible score. anything above this score is a mistimed image
-        max_score = 0.9*int(tot) #update the internal max score (multiply by 0.9 so that values that are close can still trigger as misfire)
+    elif name == "calibrate_max": #if we are running a full test (compare full image to empty to calculate the highest possible score. anything above this score is a mistimed image
+        max_score = int(0.9*tot) #update the internal max score (multiply by 0.9 so that values that are close can still trigger as misfire)
         print("Max Score: "+str(max_score)) #print the highest possible score
-        config_write(12,max_score) #save to config file
+        config_write(12,max_score) #save to config file so it will be written to startup log
         return #leave the function
     elif name == "empty misfire": #if the current capture is an empty misfire
         pic_empty.image = result #refresh the main page image
         empty_ctrl_candidate = candidate #update the current control candidate anyway, we may need to set this as the new control anyway
-        #return #leave the function
+        return #leave the function
     elif name == "full misfire": #if the current capture is a sull misfire
         pic_full.image = result #refresh the main page image
         full_ctrl_candidate = candidate #update the current control candidate anyway, we may need to set this as the new control anyway
-        #return #leave the function
+        return #leave the function
     
     #the code should only be able to execute the following if "name" is full or empty
     if check_size(output_folder): #if the image folder enough space
@@ -234,8 +236,8 @@ def capture(name): #possible inputs "full" "empty" "test"
         print("output folder full, not saving image")
         folder_has_space = False            
     if good == True: #if the image passed
-            set_control(name) #reset the control
-            app.bg = "light grey" #reset the background color
+        set_control(name) #reset the control
+        app.bg = "light grey" #reset the background color
     else: #if the image failed
         if folder_has_space == True: #if the image folder enough space
             control.save(fail_folder+tim+"_"+name+"_ctrl.jpg") #save the control to the fail folder
@@ -536,30 +538,30 @@ def config_write(line,text): #create function to write over a line in config fil
         f.writelines(lines) #write the lines array to it
     
 def check_signals(): #define code to check the signals
-    global mold_open_old, eject_fire_old, is_first_full, is_first_empty #import signal last statuses and first fire status
+    global mold_open_old, eject_fire_old, full_qty, empty_qty#import signal last statuses and first fire status
     t = time.localtime() #grab the current time
     current_time = (str(t[3])+":"+str(t[4])+":"+str(t[5])) #format it as a (hour:minute:second)
     
     if (mold_open.value == 1) and (mold_open_old == 0): #if the mold open signal line is on and the last time we checked it was off
         print("") #add an empty line
         print(current_time +": mold open, checking if full") #report signal status
-        time.sleep(open_delay)
-        if is_first_full == True:
-            print("ignoring first")
-            is_first_full = False
+        time.sleep(open_delay) #wait a user defined time before proceeding
+        if full_qty < throwout_qty:
+            print("Ignoring first few full")
+            full_qty = full_qty+1 #increment empty_qty
         else:
-            capture("full") #run processing for full mold
+            process("full") #run processing for full mold
     mold_open_old = mold_open.value #update mold open last status
     
     if (ejector_fire.value == 1) and (eject_fire_old == 0): #if the mold open signal line is on and the last time we checked it was off
         print("") #add an empty line
         print(current_time +": ejector fire, checking if empty") #report signal status
-        time.sleep(eject_delay) #wait 200ms for parts to fall out of frame. TO DO: drive via settings
-        if is_first_empty == True:
-            print("ignoring first")
-            is_first_empty = False
+        time.sleep(eject_delay) #wait user defined time before proceeding
+        if empty_qty < throwout_qty:
+            print("Ignoring first few empty")
+            empty_qty = empty_qty+1 #increment empty_qty
         else:
-            capture("empty") #run processing for empty mold
+            process("empty") #run processing for empty mold
     eject_fire_old = ejector_fire.value #update ejector fire last status
 
 def toggle_alarm_access(): #define code to toggle alarm lockout
@@ -649,15 +651,10 @@ def refresh_mask_preview(): #define code to generate and save the mask preview f
 def launch_mask_tool(): #define code to launch masking tool window
     global pid #make picture id global
     drawing.delete(pid) #delete the current image in the window
-    try:
-        drawing.delete(pid)
-        kill_all()
-        pid = drawing.image(0,0,image=full_ctrl, width = res[0], height = res[1]) #update the masking window image with the new control
-    except:
-        pass
-    else:
-        pid = drawing.image(0,0,image=comparison_folder+"/compare_full_ctrl.jpg", width = res[0], height = res[1]) #add the image back in and save pic id to pid
-    mask_win.show() #make the mask tool window visible
+    kill_all() #delete all the user made drawings
+    pid = drawing.image(0,0,image=full_ctrl, width = res[0], height = res[1]) #update the masking window image with the new control image and svae the pic id
+    mask_win.hide() #make the mask tool window invisible if possible
+    mask_win.show() #make the mask tool window visible and bring to front
     
 def toggle_mode(): #define code to toggle polygon mode on/off
     global polymode #make the status global
@@ -752,6 +749,7 @@ camera.exposure_mode = "off" #lock camera settings
 stream = picamera.PiCameraCircularIO(camera, seconds=1) #generate a camera stream in which the camera retains 1 second of footage
 camera.start_recording(stream, format='h264') #start recording to the stream
 
+process("calibrate_max")
 #create windows
 #app = App(title='main', layout='auto', width = 1700, height = 800) #create the main application window as a small window
 app = App(title='Main', layout='auto', width = display_width, height = display_height) #create the main application window in a fullsize window
@@ -770,8 +768,8 @@ PushButton(empty_preview, command=empty_preview.hide, text="Close",width=10, hei
 
 #setup main window-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 row_1 = Box(app, width=res[0]*2, height=res[1], align='top') #create a container for the images. call it row_0
-pic_full = Picture(row_1, image="/home/pi/Desktop/main_emulated/menu_image.jpg", align='left') #create picture widget to show the mold open image
-pic_empty = Picture(row_1, image="/home/pi/Desktop/main_emulated/menu_image.jpg", align='right') #create picture widget to show the ejector fire image
+pic_full = Picture(row_1, image=menu_image, align='left') #create picture widget to show the mold open image
+pic_empty = Picture(row_1, image=menu_image, align='right') #create picture widget to show the ejector fire image
 row_2 = Box(app, width=300, height=75, align='bottom') #create a container for the reset and simulate alarm buttons. call it row_2
 PushButton(row_2, command=reset_alarm, text="Reset", align='left', height="fill", width="fill") #define reset button widget
 PushButton(row_2, command=simulate_alarm, text="Simulate Alarm", align='right', height="fill", width="fill") #define settings button widget
@@ -785,8 +783,8 @@ row_5 = Box(app, width=340, height=75, align='bottom') #create a container for t
 PushButton(row_5, command=request_settings, text="Settings", align='left', height="fill", width="fill") #define settings button widget
 alarm_lock = PushButton(row_5, command=toggle_alarm_access, text="Alarm access is "+str(alarm_access), align='right', height="fill", width="fill") #define settings button widget
 row_6 = Box(app, width=330, height=75, align='bottom') #create a container for the signal simulation buttons. call it row_6
-PushButton(row_6, command=lambda: capture("empty"), text="Simulate Eject", align='right', height="fill", width="fill") #define settings button widget
-PushButton(row_6, command=lambda: capture("full"), text="Simulate Open", align='left', height="fill", width="fill") #define settings button widget
+PushButton(row_6, command=lambda: process("empty"), text="Simulate Eject", align='right', height="fill", width="fill") #define settings button widget
+PushButton(row_6, command=lambda: process("full"), text="Simulate Open", align='left', height="fill", width="fill") #define settings button widget
 PushButton(app, command=launch_mask_tool, text="Masking Tool", align='bottom', height="3", width="20") #define settings button widget
 pic_full.repeat(1, check_signals) #attach repeat widget to the picture widget to run "check_signals" every 1ms
 
@@ -912,7 +910,7 @@ Text(set_win, text="Default: 192.168.0.159", grid=[9,4])
 #add settings buttons
 PushButton(set_win, command=settings_help_win.show, text="Help", grid=[3,11], height=2, width=15) #Add button to settings window for help window
 PushButton(set_win, command=close_settings, text="Close", grid=[4,11], height=2, width=15) #create button widget to be able to close settings page (just executes hide command)
-PushButton(set_win, command=lambda: capture("test"), text="Refresh Max Score", grid=[5,11], height=2, width=15) #Depreceated button
+PushButton(set_win, command=lambda: process("calibrate_max"), text="Refresh Max Score", grid=[5,11], height=2, width=15) #Depreceated button
 PushButton(set_win, command=pass_reset_win.show, text="Reset Password", grid=[6,11], height=2, width=15) #create button widget to reset the password
 PushButton(set_win, command=transmit, text="Manually Transmit", grid=[7,11], height=2, width=15) #create button widget to reset the password
 
@@ -937,6 +935,4 @@ setup_end = time.time() #stop the timer
 setup_time = setup_end - setup_start #calculate elapsed time since setup start
 print('Setup time: {} seconds'.format(setup_time)) #display the setup making time
  
-app.display() #push everything
-
-
+app.display() #push everything to the gui
