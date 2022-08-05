@@ -68,17 +68,14 @@ black = (0,0,0) #define black pixel rgb value
 color = (0,255,0) #define colored pixel rgb value (in this case it's currently green)
 
 #load the control images
-full_ctrl = Image.open(comparison_folder+"/compare_full_ctrl.jpg") #load full control
-empty_ctrl = Image.open(comparison_folder+"/compare_empty_ctrl.jpg") #load empty control
+full_ctrl = Image.open(comparison_folder+"/compare_full_ctrl.jpg") #load full control from storage
+empty_ctrl = Image.open(comparison_folder+"/compare_empty_ctrl.jpg") #load empty control from storage
 
 full_ctrl_candidate = full_ctrl #intialize full control  candidate (this way if the user attempts to reset the control before a candidate is set it doesn' break)
 empty_ctrl_candidate = empty_ctrl #intialize empty control candidate
 
 #open the log file
 log = open(log_path, "a") #open log csv file in "append mode"
-if os.stat(log_path).st_size == 0:#if the csv file is empty do the following
-    log.write("Timestamp,Score,Pass?\n") #Rebuild column labels 
-    log.flush() #save text
 
 #grab current config settings
 with open(config_path,'r') as f: #open the config file
@@ -94,12 +91,6 @@ sens = float(lines[8].strip()) #read line 8 as the image detection sensitivity
 open_delay = float(lines[9].strip()) #read line 8 as the image detection sensitivity
 eject_delay = float(lines[10].strip()) #read line 8 as the image detection sensitivity
 server_ip = lines[11].strip() #read line 9 as the server IP
-max_score = int(lines[12]) #read line 12 as the max score
-
-#write to startup log
-startup_log = open(startup_log_path, "a") #open startup log csv file in "append mode"
-startup_log.write(time.asctime()+","+current_password+","+str(iso)+","+str(ss)+","+cm+","+str(res[0])+","+str(res[1])+","+str(rot)+","+str(thresh)+","+str(sens)+","+str(open_delay)+","+str(eject_delay)+","+server_ip+","+str(max_score)+"\n") #write the current time and settings to the startup log
-startup_log.close() #close the startup log (auto saves new data)
 
 #The Camera Zone------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #capture and process the image
@@ -217,7 +208,6 @@ def process(name): #possible inputs "full" "empty" "calibrate_max"
     elif name == "calibrate_max": #if we are running a full test (compare full image to empty to calculate the highest possible score. anything above this score is a mistimed image
         max_score = int(0.9*tot) #update the internal max score (multiply by 0.9 so that values that are close can still trigger as misfire)
         print("Max Score: "+str(max_score)) #print the highest possible score
-        config_write(12,max_score) #save to config file so it will be written to startup log
         return #leave the function
     elif name == "empty misfire": #if the current capture is an empty misfire
         pic_empty.image = result #refresh the main page image
@@ -506,6 +496,11 @@ def pass_enter(event):
         check_pass() #update the entry
         
 #Utility Functions------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+def update_startup_log(): #define code to write to the startup log
+    startup_log = open(startup_log_path, "a") #open startup log csv file in "append mode"
+    startup_log.write(time.asctime()+","+current_password+","+str(iso)+","+str(ss)+","+cm+","+str(res[0])+","+str(res[1])+","+str(rot)+","+str(thresh)+","+str(sens)+","+str(open_delay)+","+str(eject_delay)+","+server_ip+","+str(max_score)+"\n") #write the current time and settings to the startup log
+    startup_log.close() #close the startup log (auto saves new data)
+    
 def check_folder_size(path): #define code to get the size of a folder
     size = 0 #intialize size counter
     for entry in os.scandir(path): #for every entry in the specified path do the following
@@ -736,6 +731,9 @@ def save_mask():
 #Main Window----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #code resumes here after running setup stuff at the top
 refresh_mask_preview() #refresh update the preview mask in the output folder now that we have loaded all functions (this also loads the mask PIL image)
+process("calibrate_max")
+update_startup_log()
+
 camera = picamera.PiCamera() #start up the camera
 #set camera settings
 camera.exposure_mode = cm #set camera mode
@@ -749,7 +747,6 @@ camera.exposure_mode = "off" #lock camera settings
 stream = picamera.PiCameraCircularIO(camera, seconds=1) #generate a camera stream in which the camera retains 1 second of footage
 camera.start_recording(stream, format='h264') #start recording to the stream
 
-process("calibrate_max")
 #create windows
 #app = App(title='main', layout='auto', width = 1700, height = 800) #create the main application window as a small window
 app = App(title='Main', layout='auto', width = display_width, height = display_height) #create the main application window in a fullsize window
