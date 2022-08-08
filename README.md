@@ -67,3 +67,6 @@ This is the folder in which the sample and control images are stored while the c
 ### fail folder  
 This folder contains a set of images for every failure/time the alarm is triggered. Upon an image not passing it saves the current raw input, the processed output, and the control image it is being compared against. This is intended to gice the user plenty of data for analyzing failed images.  
 
+# Misc/Common Bugs/Setup
+### SCP Setup
+When setting up SCP file transfer (especially when scheduled via crontab) it is imprtant that the root user also has the credentials for scp transfer. This can be done by following [this tutorial](https://raspberrypi.stackexchange.com/questions/51877/will-an-automated-scp-script-share-files-between-pis-without-passwords/53214#53214) and then configuring it to be run by root by following [these instructions](https://raspberrypi.stackexchange.com/a/121742) in which you first generate a keyset, copy them between machines and then copy the keyset to be accessed by root. In a couple cases I had to manually make the /root/.ssh folder first.  
