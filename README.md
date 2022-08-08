@@ -40,7 +40,7 @@ This program is meant to check the wiring of the relay and test the I/O. It pres
 ### server_receipt.csv
 This is the receipt the server sends to the client. It has no contents and more or less acts as a way for the transmit script to check for a file sent from the server. This could be a good way for the server to send back some info similar to the client receipt discussed below.  
 ### start.desktop
-I followed [this tutorial](https://learn.sparkfun.com/tutorials/how-to-run-a-raspberry-pi-program-on-startup/method-2-autostart) on setting up programs to run on boot with a GUI. Currently, in my system, its destination folder is /home/pi/.config/autostart. On the pi the file is called "prog" not "start" but this is likely a difference in raspbian vs windows choosing how to display as "prog" is defined in the contents of the file. In the current setup in just launches predeployment_copy.py but in the main deployment will run Main_Emulated_Startup.py.  
+I followed [this tutorial](https://learn.sparkfun.com/tutorials/how-to-run-a-raspberry-pi-program-on-startup/method-2-autostart) on setting up programs to run on boot with a GUI. Currently, in my system, its destination folder is /home/pi/.config/autostart. On the pi the file is called "prog" not "start" but this is likely a difference in raspbian vs windows choosing how to display as "prog" is defined in the contents of the file. In the current setup in just launches predeployment_copy.py but in the main deployment will run Main_Emulated_Startup.py. A similar setup of this is used to run Main_Recieve.py on startup of the server.  
 ### run.desktop  
 I followed [this tutorial](https://www.hackster.io/kamal-khan/desktop-shortcut-for-python-script-on-raspberry-pi-fd1c63) on setting up executables for programs. This is meant to live on the desktop screen and acts as a shortcut to startup Main.py if operators accidentally close the program. I recommend enabling "Don't ask options on launch executable file" under Edit->Prefrences->General in the raspbian file explorer to execute this more seamlessly.  
 
@@ -70,3 +70,10 @@ This folder contains a set of images for every failure/time the alarm is trigger
 # Misc/Common Bugs/Setup
 ### SCP Setup
 When setting up SCP file transfer (especially when scheduled via crontab) it is imprtant that the root user also has the credentials for scp transfer. This can be done by following [this tutorial](https://raspberrypi.stackexchange.com/questions/51877/will-an-automated-scp-script-share-files-between-pis-without-passwords/53214#53214) and then configuring it to be run by root by following [these instructions](https://raspberrypi.stackexchange.com/a/121742) in which you first generate a keyset, copy them between machines and then copy the keyset to be accessed by root. In a couple cases I had to manually make the /root/.ssh folder first.  
+### Crontab Setup
+I added the following lines to crontab to autorun some things (to make it run correctly setup with the command "sudo crontab -e".  
+I added the following line to the client:  
+`00 00 * * * /sbin` This restarts the system at midnight everyday.  
+`05 00 * * * /usr/bin/python3 /home/pi/Desktop/Main_Transmit.py >> /home/pi/logs/Transmit.log 2>&1` This runs Main_Transmit.py everyday at 12:05 am and writes to a log at the specified location for debugging (this will be removed in final deployment).  
+I added the fllowing to the server:  
+`00 00 * * * /sbin` This restarts the system at midnight everyday.  
