@@ -16,7 +16,6 @@ print("Program starting. Please wait")
 mold_open = DigitalInputDevice(4) #assign input pin (GPIO4 or Pin 7) to mold open signal
 ejector_fire = DigitalInputDevice(17) #assign input pin (GPIO17 or Pin 11) to ejector fire signal
 alarm_pin = DigitalOutputDevice(27) #assign output pin (GPIO27 or pin12) to alarm signal
-alarm_button = DigitalInputDevice(22) #assign input pin (GPIO22 or pin 15) to alarm reset button
 
 #file path setup
 base_folder = "/home/pi/Desktop/Main"
@@ -161,11 +160,11 @@ def process(name): #possible inputs "full" "empty" "calibrate_max"
         #print("Object detected") #say an object was detected
         simulate_alarm()
         good = False #designate as not good/fail
-    elif (tot > max_score) and (name == "full"): #if the score is higher than the max possible and name is "full"
+    elif (name == "full") and (tot > max_score): #if the score is higher than the max possible and name is "full"
         print("Misfire!") #say it is a misfire
         good = True #dont set off the alarm
         name = "full misfire" #declate it as a full misfire
-    elif (tot > max_score) and (name == "empty"): #if the score is higher than the max possible and name is "empty"
+    elif (name == "empty") and (tot > max_score): #if the score is higher than the max possible and name is "empty"
         print("Misfire!") #say it is a misfire
         good = True #dont set off the alarm
         name = "empty misfire" #declate it as an empty misfire
@@ -533,7 +532,7 @@ def config_write(line,text): #create function to write over a line in config fil
         f.writelines(lines) #write the lines array to it
     
 def check_signals(): #define code to check the signals
-    global mold_open_old, eject_fire_old, full_qty, empty_qty#import signal last statuses and first fire status
+    global mold_open_old, eject_fire_old, full_qty, empty_qty, full_ctrl_candidate, empty_ctrl_candidate#import signal last statuses and first fire status
     t = time.localtime() #grab the current time
     current_time = (str(t[3])+":"+str(t[4])+":"+str(t[5])) #format it as a (hour:minute:second)
     
@@ -544,6 +543,9 @@ def check_signals(): #define code to check the signals
         if full_qty < throwout_qty:
             print("Ignoring first few full")
             full_qty = full_qty+1 #increment empty_qty
+            if full_qty == throwout_qty:
+                full_ctrl_candidate = capture()
+                set_control("full")
         else:
             process("full") #run processing for full mold
     mold_open_old = mold_open.value #update mold open last status
@@ -555,6 +557,9 @@ def check_signals(): #define code to check the signals
         if empty_qty < throwout_qty:
             print("Ignoring first few empty")
             empty_qty = empty_qty+1 #increment empty_qty
+            if empty_qty == throwout_qty:
+                empty_ctrl_candidate = capture()
+                set_control("empty")
         else:
             process("empty") #run processing for empty mold
     eject_fire_old = ejector_fire.value #update ejector fire last status
