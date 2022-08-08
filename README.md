@@ -73,7 +73,7 @@ When setting up SCP file transfer (especially when scheduled via crontab) it is 
 ### Crontab Setup
 I added the following lines to crontab to autorun some things (to make it run correctly setup with the command "sudo crontab -e".  
 I added the following line to the client:  
-`00 00 * * * /sbin` This restarts the system at midnight everyday.  
+`00 00 * * * /sbin/shutdown -r now` This restarts the system at midnight everyday.  
 `05 00 * * * /usr/bin/python3 /home/pi/Desktop/Main_Transmit.py >> /home/pi/logs/Transmit.log 2>&1` This runs Main_Transmit.py everyday at 12:05 am and writes to a log at the specified location for debugging (this will be removed in final deployment).  
 I added the fllowing to the server:  
-`00 00 * * * /sbin` This restarts the system at midnight everyday.  
+`00 00 * * * /sbin/shutdown -r now` This restarts the system at midnight everyday.  
