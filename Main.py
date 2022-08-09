@@ -70,6 +70,9 @@ color = (0,255,0) #define colored pixel rgb value (in this case it's currently g
 full_ctrl = Image.open(comparison_folder+"/compare_full_ctrl.jpg") #load full control from storage
 empty_ctrl = Image.open(comparison_folder+"/compare_empty_ctrl.jpg") #load empty control from storage
 
+full_ctrl = Image.open(comparison_folder+"/Edit_full_ctrl.jpg") #load full control from storage
+empty_ctrl = Image.open(comparison_folder+"/Edit_empty_ctrl.jpg") #load empty control from storage
+
 full_ctrl_candidate = full_ctrl #intialize full control  candidate (this way if the user attempts to reset the control before a candidate is set it doesn' break)
 empty_ctrl_candidate = empty_ctrl #intialize empty control candidate
 
@@ -87,9 +90,10 @@ res = (int(lines[4]),int(lines[5])) #read lines 4/5 as the camera resolution
 rot = int(lines[6]) #read line 6 as the image rotation
 thresh = int(lines[7]) #read line 7 as the image detection threshold
 sens = float(lines[8].strip()) #read line 8 as the image detection sensitivity
-open_delay = float(lines[9].strip()) #read line 8 as the image detection sensitivity
-eject_delay = float(lines[10].strip()) #read line 8 as the image detection sensitivity
-server_ip = lines[11].strip() #read line 9 as the server IP
+open_delay = float(lines[9].strip()) #read line 9 as open capture delay
+eject_delay = float(lines[10].strip()) #read line 10 as the eject capture delay
+server_ip = lines[11].strip() #read line 11 as the server IP
+name = lines[12].strip() #read line 12 as the machine name
 
 #The Camera Zone------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #capture and process the image
@@ -117,11 +121,11 @@ def process(name): #possible inputs "full" "empty" "calibrate_max"
     if name == "full": #if the arg is "full"
         control = full_ctrl #set the main control to the full control
         comp = capture()
-        #comp = Image.open(comparison_folder+"/compare_full_edit.jpg") #manually overwrite image to load
+        comp = Image.open(comparison_folder+"/Edit_full_ctrl.jpg") #manually overwrite image to load
     elif name == "empty": #if the arg is empty
         control = empty_ctrl #set the main control to the empty control
         comp = capture()
-        #comp = Image.open(comparison_folder+"/compare_empty_edit.jpg") #manually overwrite image to load
+        comp = Image.open(comparison_folder+"/Edit_empty_ctrl.jpg") #manually overwrite image to load
     elif name == "calibrate_max":
         control = full_ctrl #set the main control to the full control
         comp = empty_ctrl
@@ -449,6 +453,18 @@ def reset_pass(): #define code to change the password
         conf_pass_input.value = ""
         pass_reset_win.hide() #conceal password reset window
 
+def change_name(): #define code to change the machine name
+    try: #attempt the following
+        new_name = str(name_input.value) #grab input and ensure it's converted to string
+    except: #if it fails
+        set_win.error("Warning", "invalid input, not saving")
+    else: #otherwise
+        print("Setting Machine Name to:"+new_name) #print to terminal
+        name = new_name #update the current value
+        config_write(12,name) #save to config file
+        name_curr_text.value = "Current Name: "+str(name) #update window text
+        name_input.value = "" #clear the textbox
+
 #create functions to check each box for an enter key press
 def iso_enter(event):
     if event.key == "\r": #check if key pressed is enter
@@ -486,6 +502,10 @@ def sip_enter(event):
     if event.key == "\r": #check if key pressed is enter
         change_sip() #update the entry
 
+def name_enter(event):
+    if event.key == "\r": #check if key pressed is enter
+        change_name() #update the entry
+
 def pass_reset_enter(event):
     if event.key == "\r": #check if key pressed is enter
         reset_pass() #update the entry
@@ -493,11 +513,11 @@ def pass_reset_enter(event):
 def pass_enter(event):
     if event.key == "\r": #check if key pressed is enter
         check_pass() #update the entry
-        
+            
 #Utility Functions------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 def update_startup_log(): #define code to write to the startup log
     startup_log = open(startup_log_path, "a") #open startup log csv file in "append mode"
-    startup_log.write(time.asctime()+","+current_password+","+str(iso)+","+str(ss)+","+cm+","+str(res[0])+","+str(res[1])+","+str(rot)+","+str(thresh)+","+str(sens)+","+str(open_delay)+","+str(eject_delay)+","+server_ip+","+str(max_score)+"\n") #write the current time and settings to the startup log
+    startup_log.write(time.asctime()+","+current_password+","+str(iso)+","+str(ss)+","+cm+","+str(res[0])+","+str(res[1])+","+str(rot)+","+str(thresh)+","+str(sens)+","+str(open_delay)+","+str(eject_delay)+","+server_ip+","+str(max_score)+","+name+"\n") #write the current time and settings to the startup log
     startup_log.close() #close the startup log (auto saves new data)
     
 def check_folder_size(path): #define code to get the size of a folder
@@ -908,6 +928,13 @@ sip_input = TextBox(set_win, grid=[7,4])
 sip_input.when_key_pressed = sip_enter #if a key is pressed in the text box run the enter check
 PushButton(set_win, command=change_sip, text="set", grid=[8,4], height=2, width=10)
 Text(set_win, text="Default: 192.168.0.159", grid=[9,4])
+
+#create secton for machine name (setup identical to ISO, see that section for line by line)
+name_curr_text = Text(set_win, text="Current Machine Name: "+name, grid=[6,5])
+name_input = TextBox(set_win, grid=[7,5])
+name_input.when_key_pressed = name_enter #if a key is pressed in the text box run the enter check
+PushButton(set_win, command=change_name, text="set", grid=[8,5], height=2, width=10)
+Text(set_win, text="Suggestion: Machine Number", grid=[9,5])
 
 #add settings buttons
 PushButton(set_win, command=settings_help_win.show, text="Help", grid=[3,11], height=2, width=15) #Add button to settings window for help window

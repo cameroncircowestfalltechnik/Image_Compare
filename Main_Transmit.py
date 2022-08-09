@@ -8,6 +8,7 @@ import shutil
 
 #define file paths/defaults
 base_folder = "/home/pi/Desktop/Main"
+config_path = base_folder+"/config.txt" #define config file path
 output_path = base_folder+"/output" #define path to send
 destination_path = "/home/pi/Desktop/recieve" #define where to send to 
 image_path = output_path+"/images/" #define image folder location
@@ -16,6 +17,8 @@ client_receipt_path = output_path+"/client_receipt.csv"
 server_receipt_path = "/home/pi/Desktop/recieve/server_receipt.csv" #define receipt location
 server_ip = "192.168.0.159" #define who to send to (default)
 popups_allowed = False #by default disable popups (this means when this cript is called by crontab it wont make popups
+
+#shutil.copy("/home/pi/Desktop/Main/menu_image.jpg","/home/pi/Desktop/img.jpg") #debug
 
 #define arguments
 parser = argparse.ArgumentParser() #start argument parser
@@ -44,6 +47,11 @@ def check_folder_size(path): #define code to get the size of a folder
             size = size+check_folder_size(entry.path) #get the size of the contents of the folder and add them to the total
     return size #return the folder size in bytes
 
+#grab current config settings
+with open(config_path,'r') as f: #open the config file
+    lines = f.readlines() #write line by line to "lines"
+name = lines[12].strip() #read line 12 as the machine name
+
 #grab the client IP
 client_ip = subprocess.getoutput('hostname -I').rstrip() #grab the client ip and write it to client_ip
 
@@ -59,6 +67,7 @@ rec = open(client_receipt_path, 'w') #open the client receipt in write mode
 writer = csv.writer(rec) #build a writer
 writer.writerow([str(size)]) #write over the first row with the folder size as a single entry
 writer.writerow([client_ip]) #write over the second row with client ip as a single entry
+writer.writerow([name]) #write over the third row with the machine name as a single entry
 rec.close() #close/save the cient receipt
 
 #transmit
@@ -86,9 +95,9 @@ while elapsed_time < timeout_time: #if time since transmit start is less than th
     if file_exists == True: #if the reciept is found
         
         #wipe the images folder
-        shutil.rmtree(image_path) #delete the images folder and all the files within
+        shutil.rmtree(image_path, ignore_errors=True) #delete the images folder and all the files within
         os.mkdir(image_path) #recreate the images folder
-        shutil.rmtree(fail_image_path) #delete the fail images folder and all the files within
+        shutil.rmtree(fail_image_path, ignore_errors=True) #delete the fail images folder and all the files within
         os.mkdir(fail_image_path) #recreate the fail images folder
         shutil.copy(base_folder+"/log_template.csv",output_path+"/log.csv") #copy the log template over the current log and name it log
         

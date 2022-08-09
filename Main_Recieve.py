@@ -10,7 +10,7 @@ results_path = main_folder+"/output"
 client_receipt_path = main_folder+"/client_receipt.csv" #define the location of the client receipt
 server_receipt_path = main_folder+"/server_receipt.csv" #define the location of the server receipt
 image_path = results_path+"images/" #define the location of recieved images
-usb_path = "/media/pi/VISION_SYS/Archive" #define the location of the usb drive
+usb_path = "/media/pi/VISION_SYS1/Archive/" #define the location of the usb drive
 
 processing_path = "/home/pi/Desktop/processing/" #define location of processing folder
 archive_path = "/home/pi/Desktop/archive/" #defifne location of archive folder
@@ -51,6 +51,8 @@ while True: #forever do the following
             reader = csv.reader(r) #create reader
             size = next(reader) #read the first line as the image folder size
             client_ip = next(reader) #read the second line as the client ip
+            name = next(reader) #read the third line as the machine name
+            name = name[0]
         size = int(size[0]) #convert from single element list to interger
         client_ip = client_ip[0] #convert from single element list to string
         #print("client ip: "+client_ip) #print the client ip
@@ -79,31 +81,30 @@ while True: #forever do the following
         subprocess.run(["scp",server_receipt_path, "pi@"+client_ip+":"+server_receipt_dest]) #send server reciept
         
         #save files to desired location
+        sleep(1)
         os.remove(client_receipt_path) #delete the client reciept
         tim = time.asctime() #get the current date/time
         day = tim[:3] #extract the day
         numday =  time.localtime() #get the local unix time
         num_day = time.strftime("%d",numday) #extract the day of the month as a number
-        name = tim[:3]+"_"+tim[4:7]+"_"+num_day+"_at_"+tim[11:13]+"_"+tim[14:16]+"_"+tim[17:19] #Generate the folder name as the current time/date in form: day_month_num day_at_hout_minute_second
+        title = name+"_"+tim[:3]+"_"+tim[4:7]+"_"+num_day+"_at_"+tim[11:13]+"_"+tim[14:16]+"_"+tim[17:19] #Generate the folder title as the current time/date in form: day_month_num day_at_hout_minute_second
         if os.path.exists(usb_path): #check if the usb stick path is present (the usb stick is connected and readable
-            save_path = usb_path+'/'+day #set the output save path as the folder on the usb stick for the current day of the week
+            save_path = usb_path+day #set the output save path as the folder on the usb stick for the current day of the week
             size_cap = external_size_cap #use the external size cap
-            print("Saving externally to "+save_path+"/"+name) #print the save location
+            print("Saving externally to "+save_path+"/"+title) #print the save location
         else: #otherwise (if the usb stick is not connected)
-            save_path = archive_path+'/'+day #set the output save path as the folder on the system for the current day of the week (ie. if the usb stick is detached save internally instead)
+            save_path = archive_path+day #set the output save path as the folder on the system for the current day of the week (ie. if the usb stick is detached save internally instead)
             size_cap = internal_size_cap #use the internal size cap
-            print("Saving internally to "+save_path+"/"+name) #print the save location
+            print("Saving internally to "+save_path+"/"+title) #print the save location
         if check_folder_size(save_path) > size_cap: #if archive folder is larger than the folder size cap
             target = find_oldest_dir(save_path) #locate the name of the oldest folder
             shutil.rmtree(target) #delete the oldest folder
             print("Folder full, deleting "+target) #print that we are deleting this folder
         os.system("mv "+results_path+" "+save_path) #move the results to the path defined earlier
-        os.rename(save_path+"/output", save_path+"/"+name) #rename it to the name we generated
+        os.rename(save_path+"/output", save_path+"/"+title) #rename it to the name we generated
         print("Complete!")
         #quit() #close the program
         
     #what to do if the client receipt is not present yet
-    else: #if it has not been recieved
-        print("waiting") #print as such
     sleep(0.1) #wait 0.1s to reduce resource use
 
