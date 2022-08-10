@@ -17,7 +17,7 @@ The general flow of the program is the following:
   -Save the settings to the config file  
   -Genearate an image mask to specify regions to check for discrepencies  
   -See help on how to operate the system  
-  -Grant alarm access
+  -Grant alarm access  
   -Transmit files  
   -Reset the password  
   -Open/close a touchscreen keyboard ([See this tutorial for setup](https://ozzmaker.com/virtual-keyboard-for-the-raspberry-pi/))  
