@@ -83,3 +83,7 @@ I added the fllowing to the server:
 
 ### Documentation
 This folder contains important files relating to the documentation of the project.
+CAD: This folder contains all CAD files relating to the construction of the project.  
+BOM.xlsx: This is a spreadsheet of the bill of materials to completely replicate the system
+Setup tutorial.docx: This is a word document describing how to setup the system.
+Wiring Diagram.png: This is an illustration of the wiring required to setup the system.
