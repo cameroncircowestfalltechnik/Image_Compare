@@ -44,7 +44,7 @@ while True: #forever do the following
    
    #recieve files
     if file_exists == True: #if it has been recieved
-        
+        print("Client Receipt Found!")
         sleep(0.25) #wait a moment for the entire receipt to arrive
         #read info from client receipt
         with open(client_receipt_path, 'r') as r: #open the client receipt in read mode
@@ -52,15 +52,18 @@ while True: #forever do the following
             size = next(reader) #read the first line as the image folder size
             client_ip = next(reader) #read the second line as the client ip
             name = next(reader) #read the third line as the machine name
-            name = name[0]
+        name = name[0]
         size = int(size[0]) #convert from single element list to interger
         client_ip = client_ip[0] #convert from single element list to string
         #print("client ip: "+client_ip) #print the client ip
         print("File Size: "+str(size))
+        print("Name: "+name)
+        print("IP: "+client_ip)
         
         while not os.path.exists(results_path): #do nothing until the file system sees the results folder
-            pass
-        
+            sleep(0.25) #sleep for 0.25s
+            #pass
+        print("Results found")
         #wait until the recieved image folder size is the same as the client receipt says it should be
         same_data_count = 0 #intialize variable to track whether data transfer is complete
         size_last = None
@@ -79,7 +82,7 @@ while True: #forever do the following
         #indicate file reception
         print("Transfer Complete") #print file transfer complete
         subprocess.run(["scp",server_receipt_path, "pi@"+client_ip+":"+server_receipt_dest]) #send server reciept
-        
+        print("Server Receipt Sent!")
         #save files to desired location
         sleep(1)
         os.remove(client_receipt_path) #delete the client reciept
@@ -88,6 +91,7 @@ while True: #forever do the following
         numday =  time.localtime() #get the local unix time
         num_day = time.strftime("%d",numday) #extract the day of the month as a number
         title = name+"_"+tim[:3]+"_"+tim[4:7]+"_"+num_day+"_at_"+tim[11:13]+"_"+tim[14:16]+"_"+tim[17:19] #Generate the folder title as the current time/date in form: day_month_num day_at_hout_minute_second
+        print("Starting Saving")
         if os.path.exists(usb_path): #check if the usb stick path is present (the usb stick is connected and readable
             save_path = usb_path+day #set the output save path as the folder on the usb stick for the current day of the week
             size_cap = external_size_cap #use the external size cap

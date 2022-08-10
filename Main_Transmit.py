@@ -22,12 +22,9 @@ popups_allowed = False #by default disable popups (this means when this cript is
 
 #define arguments
 parser = argparse.ArgumentParser() #start argument parser
-parser.add_argument("-sip","--serverip", action="store", type=str) #create argument to accept an override server ip
 parser.add_argument("-pop","--popup", action="store_true") #create argument to allow popups (it just needs to be entered to enable popups)
 args = parser.parse_args() #parse the argument(s)
-if args.serverip: #if a server ip is specified
-    print("Server specified as: "+args.serverip)
-    server_ip = args.serverip #override the default with the specified ip
+
 if args.popup:
     print("Popups allowed set to :"+str(args.popup))
     popups_allowed = args.popup
@@ -50,6 +47,7 @@ def check_folder_size(path): #define code to get the size of a folder
 #grab current config settings
 with open(config_path,'r') as f: #open the config file
     lines = f.readlines() #write line by line to "lines"
+server_ip = lines[11].strip() #read line 11 as the server IP
 name = lines[12].strip() #read line 12 as the machine name
 
 #grab the client IP
@@ -57,7 +55,7 @@ client_ip = subprocess.getoutput('hostname -I').rstrip() #grab the client ip and
 
 #delete the old receipt
 try:
-    os.remove(server_receipt_path) #attempt to delete the old receipt
+    os.remove(server_receipt_path) #attempt to delete the old retceipt
 except: #on fail
     pass #do nothing
 
@@ -100,7 +98,7 @@ while elapsed_time < timeout_time: #if time since transmit start is less than th
         shutil.rmtree(fail_image_path, ignore_errors=True) #delete the fail images folder and all the files within
         os.mkdir(fail_image_path) #recreate the fail images folder
         shutil.copy(base_folder+"/log_template.csv",output_path+"/log.csv") #copy the log template over the current log and name it log
-        
+        os.remove(server_receipt_path)
         #create success popup
         if popups_allowed:
             notif = App(title="Status", width = 200, height = 100) #create the main application window

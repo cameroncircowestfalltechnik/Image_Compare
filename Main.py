@@ -70,9 +70,6 @@ color = (0,255,0) #define colored pixel rgb value (in this case it's currently g
 full_ctrl = Image.open(comparison_folder+"/compare_full_ctrl.jpg") #load full control from storage
 empty_ctrl = Image.open(comparison_folder+"/compare_empty_ctrl.jpg") #load empty control from storage
 
-full_ctrl = Image.open(comparison_folder+"/Edit_full_ctrl.jpg") #load full control from storage
-empty_ctrl = Image.open(comparison_folder+"/Edit_empty_ctrl.jpg") #load empty control from storage
-
 full_ctrl_candidate = full_ctrl #intialize full control  candidate (this way if the user attempts to reset the control before a candidate is set it doesn' break)
 empty_ctrl_candidate = empty_ctrl #intialize empty control candidate
 
@@ -121,11 +118,11 @@ def process(name): #possible inputs "full" "empty" "calibrate_max"
     if name == "full": #if the arg is "full"
         control = full_ctrl #set the main control to the full control
         comp = capture()
-        comp = Image.open(comparison_folder+"/Edit_full_ctrl.jpg") #manually overwrite image to load
+        #comp = Image.open(comparison_folder+"/Edit_full_ctrl.jpg") #manually overwrite image to load
     elif name == "empty": #if the arg is empty
         control = empty_ctrl #set the main control to the empty control
         comp = capture()
-        comp = Image.open(comparison_folder+"/Edit_empty_ctrl.jpg") #manually overwrite image to load
+        #comp = Image.open(comparison_folder+"/Edit_empty_ctrl.jpg") #manually overwrite image to load
     elif name == "calibrate_max":
         control = full_ctrl #set the main control to the full control
         comp = empty_ctrl
@@ -607,7 +604,7 @@ def shutdown(): #define code to shutdown the program
     quit() #stop the program
     
 def transmit(): #define code to transmit files to server This could probably jsut be done by a really long guizero button instead of as a function
-    subprocess.Popen(["python", "Main_Transmit.py", "-sip", server_ip, "-pop"]) #run the transmit script with the specified server ip and popups on
+    subprocess.Popen(["python", "Main_Transmit.py", "-pop"]) #run the transmit script with the specified server ip and popups on
 
 def keyboard(arg): #define code to open/close/toggle the keyboard
     #recieved argument:"open"
