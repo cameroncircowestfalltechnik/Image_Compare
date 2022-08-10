@@ -55,7 +55,7 @@ This is a copy of the log but with no data present. It is used by transmit to wi
 ### startup_log.csv
 This log is written to once on every startup, it tracks the startup time and settings upon startup. This one is also formatted to it should be pretty self explanitory when viewed in github.  
 ### config.txt
-This is a sample of my current config file. It stores the following in this order, password, ISO, shutter speed, camera mode, image width, image height, image rotation, image detection threshold, sensitivity, mold open delay, and ejector fire delay. 
+This is a sample of my current config file. It stores the following in this order, password, ISO, shutter speed, camera mode, image width, image height, image rotation, image detection threshold, sensitivity, mold open delay, ejector fire delay, and machine name. 
 ### menu_image.jpg
 This is a sample image that is used as the first image to be displayed when the client programs are launched. It stands as a placeholder until the program processes and displays a new image.  
 ### mask_preview.jpg  
@@ -77,3 +77,6 @@ I added the following line to the client:
 `05 00 * * * /usr/bin/python3 /home/pi/Desktop/Main_Transmit.py >> /home/pi/logs/Transmit.log 2>&1` This runs Main_Transmit.py everyday at 12:05 am and writes to a log at the specified location for debugging (this will be removed in final deployment).  
 I added the fllowing to the server:  
 `00 00 * * * /sbin/shutdown -r now` This restarts the system at midnight everyday.  
+
+### Documentation
+This folder contains important files relating to the documentation of the project.
