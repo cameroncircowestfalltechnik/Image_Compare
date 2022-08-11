@@ -206,7 +206,7 @@ def process(name): #possible inputs "full" "empty" "calibrate_max"
         log.flush()#save it
         
     elif name == "calibrate_max": #if we are running a full test (compare full image to empty to calculate the highest possible score. anything above this score is a mistimed image
-        max_score = int(0.9*tot) #update the internal max score (multiply by 0.9 so that values that are close can still trigger as misfire)
+        max_score = int(0.75*tot) #update the internal max score (multiply by 0.9 so that values that are close can still trigger as misfire)
         print("Max Score: "+str(max_score)) #print the highest possible score
         return #leave the function
     elif name == "empty misfire": #if the current capture is an empty misfire
@@ -604,7 +604,7 @@ def shutdown(): #define code to shutdown the program
     quit() #stop the program
     
 def transmit(): #define code to transmit files to server This could probably jsut be done by a really long guizero button instead of as a function
-    subprocess.Popen(["python", "Main_Transmit.py", "-pop"]) #run the transmit script with the specified server ip and popups on
+    subprocess.Popen(["python", "Main_Transmit.py", "-pop"]) #run the transmit script with popups enabled
 
 def keyboard(arg): #define code to open/close/toggle the keyboard
     #recieved argument:"open"
