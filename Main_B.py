@@ -134,7 +134,6 @@ def auto_brightness(comp,control): #define function to do brightness compensatio
         factor = control_brightness/comp_brightness #calculate the brightness factor (will be >1)
         enhancer = ImageEnhance.Brightness(comp) #Say we want to change the brightness of the comparison image
         comp = enhancer.enhance(factor) #increase the comparison brightness by our brightness factor
-    print("factor: "+str(factor))
     return comp,control #return processed images
         
 def process(name): #possible inputs "full" "empty" "calibrate_max"
@@ -207,8 +206,7 @@ def process(name): #possible inputs "full" "empty" "calibrate_max"
         comp.paste(diff[i],(x[i],y[i])) #paste the picture of the region with the overlay on it over the whole image at the correct coords
 
     result = comp #write comp to result (this was easier than renaming result below
-    #print(result)
-    #result.show()
+
     #rotate image if needed (if camera is mounted sideways or upsidedown)
     result = result.rotate(rot)
     if name == "full": #if the name is "full"
@@ -298,7 +296,7 @@ def simulate_alarm(): #define the code to simulate the alarm
     if alarm_access:alarm_pin.blink(on_time=0.1,n=1) #if alarm access is enabled make the alarm line "blink" for 0.1s once
 
 def close_settings(): #define code to close the settings window
-    sett_close = set_win.yesno("Restart?", "Restart program to send camera new settings? (Not rquired if changing rotation, sensitivity, or threshold)") #create popup to ask if user wants to restart to push new settings to camera
+    sett_close = set_win.yesno("Restart?", "Restart program to send camera new settings?") #create popup to ask if user wants to restart to push new settings to camera
     keyboard("close") #close the keyboard
     if sett_close == True: #if the answer is yes
         restart() #restart the program (maybe just migrate this out of a function if this is the only refrence)
@@ -684,10 +682,10 @@ def set_control(name): #define code to set the control image as the current cand
 def refresh_mask_preview(): #define code to generate and save the mask preview for use in the mask tool and archive
     global mask, current_mask, x, y, w, h, zone_qty, output
     
-    #ctrl_cp = full_ctrl
+    #ctrl_cp = full_ctrl #uncomment to be able to view zone located
     
     mask = cv2.imread(comparison_folder+"/mask.jpg",0) #read the image mask as a B&W opencv object
-    ret,thresh = cv2.threshold(mask,127,255,0)
+    ret,thresh = cv2.threshold(mask,127,255,0) #convert from grayscale to black and white
     im2,contours,heirarchy = cv2.findContours(thresh,1,2) #run the image mask through the opencv find contour tool
     zone_qty = len(contours) #find the number of contours (this is equal to the number of regions drawn)
     #generate coordinate arrays to hold the x, y, width, and height of each region built
@@ -696,12 +694,12 @@ def refresh_mask_preview(): #define code to generate and save the mask preview f
     y = [None]*zone_qty
     w = [None]*zone_qty
     h = [None]*zone_qty
-    #test_drw = ImageDraw.Draw(ctrl_cp)
+    #test_drw = ImageDraw.Draw(ctrl_cp)#uncomment to be able to view zone located
     
     for i in range(0,zone_qty): #for every region found
         x[i],y[i],w[i],h[i] = cv2.boundingRect(contours[i]) #grab the x, y, width, and height of each region built
-        #test_drw.rectangle([x[i],y[i],x[i]+w[i],y[i]+h[i]],fill=None, outline ='red', width=10)
-    #ctrl_cp.show()
+        #test_drw.rectangle([x[i],y[i],x[i]+w[i],y[i]+h[i]],fill=None, outline ='red', width=10) #uncomment to be able to view zone located
+    #ctrl_cp.show() #uncomment to be able to view zone located
     
     mask = Image.open(comparison_folder+"/mask.jpg") #load image mask as PIL object
     mask_color = ImageOps.colorize(mask, black, color, blackpoint=0, whitepoint=255, midpoint=127) #convert from black and white to rgb
