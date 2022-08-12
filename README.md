@@ -23,7 +23,13 @@ The general flow of the program is the following:
   -Open/close a touchscreen keyboard ([See this tutorial for setup](https://ozzmaker.com/virtual-keyboard-for-the-raspberry-pi/))  
   -View and reset both control images  
  I recommend going through the code line by line for exact detail as I commented just about every line
- 
+
+### Main_B.py
+This is a variant of the main program designed to be deployed on a different setup. The main changes are that it is designed to maintaina single image, used larger images and process more efficiently. This is described in detail below:  
+-Only processes masked areas at the cost of forcing masked area to be rectangular  
+-Uses opencv contour detection to detect the areas defined by masking tool  
+-Captures 1920x1080 images by default and then downscales them in all the GUI elements in order to display properly  
+
 ### Main_Startup.py
  This program allows the main script to restart itself. I encountered an issue where the program could start a new iteration of itself but would never close the old one. This would lead to a memory leak. As such this program is designed to attempt to close the main program and then launches it. Finally, the main program attempts to stop this program on its startup. This program is intended to be run on client startup.  
 
