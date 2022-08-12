@@ -6,7 +6,7 @@ import shutil
 import csv
 
 main_folder = "/home/pi/Desktop/recieve"
-results_path = main_folder+"/output"
+results_path = main_folder+"/send"
 client_receipt_path = main_folder+"/client_receipt.csv" #define the location of the client receipt
 server_receipt_path = main_folder+"/server_receipt.csv" #define the location of the server receipt
 image_path = results_path+"images/" #define the location of recieved images
@@ -105,7 +105,7 @@ while True: #forever do the following
             shutil.rmtree(target) #delete the oldest folder
             print("Folder full, deleting "+target) #print that we are deleting this folder
         os.system("mv "+results_path+" "+save_path) #move the results to the path defined earlier
-        os.rename(save_path+"/output", save_path+"/"+title) #rename it to the name we generated
+        os.rename(save_path+"/send", save_path+"/"+title) #rename it to the name we generated
         print("Complete!")
         #quit() #close the program
         

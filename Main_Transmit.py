@@ -15,10 +15,7 @@ image_path = output_path+"/images/" #define image folder location
 fail_image_path = output_path+"/fail/" #define fail image location
 client_receipt_path = output_path+"/client_receipt.csv"
 server_receipt_path = "/home/pi/Desktop/recieve/server_receipt.csv" #define receipt location
-server_ip = "192.168.0.159" #define who to send to (default)
 popups_allowed = False #by default disable popups (this means when this cript is called by crontab it wont make popups
-
-#shutil.copy("/home/pi/Desktop/Main/menu_image.jpg","/home/pi/Desktop/img.jpg") #debug
 
 #define arguments
 parser = argparse.ArgumentParser() #start argument parser
@@ -55,7 +52,7 @@ client_ip = subprocess.getoutput('hostname -I').rstrip() #grab the client ip and
 
 #delete the old receipt
 try:
-    os.remove(server_receipt_path) #attempt to delete the old retceipt
+    os.remove(server_receipt_path) #attempt to delete the old receipt
 except: #on fail
     pass #do nothing
 
@@ -73,17 +70,27 @@ print("Attempting Transmission")
 try: #try the following
     subprocess.check_output(["scp","-r",client_receipt_path, "pi@"+server_ip+":"+destination_path])#send the client receipt
 except subprocess.CalledProcessError: #upon an error (no route to host)
-    #Print Error and terminate once closed
+    #Print Error and terminate
     if popups_allowed:
         notif = App(title="Status", width = 400, height = 150) #create the main application window
-        text = Text(notif, text="Unable to find Server\n\nThe error may be cause by the following:\n-Either server or client are not connected to internet\n-Specified server IP is incorrect") #create notification text
-        button = PushButton(notif, command=quit, text="OK") #press ok button to close the program
+        Text(notif, text="Unable to find Server\n\nThe error may be cause by the following:\n-Either server or client are not connected to internet\n-Specified server IP is incorrect") #create notification text
+        PushButton(notif, command=quit, text="OK") #press ok button to close the program
         notif.display() #intialize the gui
     else:
         print("Error: server not found")
         quit()
 
-subprocess.check_output(["scp","-r",output_path, "pi@"+server_ip+":"+destination_path])#send entire source folder
+#rename output and rebuild it so that images can continue to be saved
+os.rename(output_path,base_folder+"/send") #rename output to "send"
+os.mkdir(output_path) #reacreate output
+shutil.copy(base_folder+"/log_template.csv",output_path+"/log.csv") #copy the log template over and name it log (this effectively adds back an empty log)
+shutil.copyfile(base_folder+"/send/startup_log.csv",output_path+"/startup_log.csv") #copy over the startup log from send
+shutil.copyfile(base_folder+"/send/client_receipt.csv",output_path+"/client_receipt.csv") #copy over the client receipt from send
+os.mkdir(image_path) #recreate the image path
+os.mkdir(fail_image_path) #recreate the fail path
+os.system("sudo chmod 777 -R "+output_path) #set the permissions to full for all users
+
+subprocess.check_output(["scp","-r",base_folder+"/send", "pi@"+server_ip+":"+destination_path])#send entire "send" folder
 
 #check that server has responded
 start_time = time.time() #grab transmit start time
@@ -93,29 +100,27 @@ while elapsed_time < timeout_time: #if time since transmit start is less than th
     if file_exists == True: #if the reciept is found
         
         #wipe the images folder
-        shutil.rmtree(image_path, ignore_errors=True) #delete the images folder and all the files within
-        os.mkdir(image_path) #recreate the images folder
-        shutil.rmtree(fail_image_path, ignore_errors=True) #delete the fail images folder and all the files within
-        os.mkdir(fail_image_path) #recreate the fail images folder
-        shutil.copy(base_folder+"/log_template.csv",output_path+"/log.csv") #copy the log template over the current log and name it log
-        os.remove(server_receipt_path)
-        #create success popup
+        shutil.rmtree(base_folder+"/send", ignore_errors=True) #delete the send folder and all the files within
+        os.remove(server_receipt_path) #delete the server receipt
+        #report complete status
         if popups_allowed:
             notif = App(title="Status", width = 200, height = 100) #create the main application window
-            text = Text(notif, text="Files Recieved") #create notification text
-            button = PushButton(notif, command=quit, text="OK") #press okay button to close the program
+            Text(notif, text="Files Recieved") #create notification text
+            PushButton(notif, command=quit, text="OK") #press okay button to close the program
             notif.display() #intialize the gui
         else:
-            print("Files Recieved")
-            quit()
+            print("Files Recieved") #print status
+            quit() #close the script
     time.sleep(sleep_time) #wait for sleep time (lowers time between file checks to lower resource use
 
-#create failure popup
+#create failure notification
 if popups_allowed:
     notif = App(title="Status Notification", width = 200, height = 100) #create the main application window
-    text = Text(notif, text="File transmission timed out") #create notification text
-    button = PushButton(notif, command=quit, text="OK")#press okay button to close the program
+    Text(notif, text="File transmission timed out") #create notification text
+    PushButton(notif, command=quit, text="OK")#press okay button to close the program
     notif.display()
 else:
-    print("Error: timed out")
-    quit()
+    print("Error: timed out") #print to terminal
+    quit() #close the script
+
+
