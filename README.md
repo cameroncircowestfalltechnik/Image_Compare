@@ -24,6 +24,9 @@ The general flow of the program is the following:
   -View and reset both control images  
  I recommend going through the code line by line for exact detail as I commented just about every line
 
+### Dev_old.py
+This is a depreceated version of Main that moved most of the settings buttons to the main GUI page, this made debugging much easier as they buttons were not on their own password protected window.  
+
 ### Main_B.py
 This is a variant of the main program designed to be deployed on a different setup. The main changes are that it is designed to maintaina single image, used larger images and process more efficiently. This is described in detail below:  
 -Only processes masked areas at the cost of forcing masked area to be rectangular  
