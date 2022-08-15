@@ -1,4 +1,4 @@
 [Desktop Entry]
 Type=Application
 Name=prog
-Exec=/usr/bin/python3 /home/pi/Desktop/predeployment_copy.py
+Exec=/usr/bin/python3 /home/pi/Desktop/Main.py
