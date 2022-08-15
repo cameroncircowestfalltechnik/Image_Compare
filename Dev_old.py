@@ -49,8 +49,7 @@ size_max = 5000000000 #set max output folder size (currently 5 GB)
 size_status = 1 #create a interger to count how many times the size has been checked and maintain its status
 size_check_reset = 10 #define how many times to request a folder check before actually running
 alarm_access = False #intialize Alarm lockout defaults to no access
-fail_count = [0]*2 #counts how many consecutive fails have occured
-fail_reset = 10 #specifies how many consectutive fails force a reset
+#server_ip = "192.168.0.159" #specify server IP
 did = [] #create empty list to store mask drawing ids (stores the ids of all drawings on the image)
 coords = [] #create empty list to store drawing coordinates
 polymode = False #intialize mask drawing mode as polygon mode off
@@ -112,7 +111,7 @@ def capture():
     return image
     
 def process(name): #possible inputs "full" "empty" "calibrate_max"
-    global full_score, full_pass, full_ctrl, empty_ctrl, max_score, tim, full_ctrl_candidate, empty_ctrl_candidate, fail_count
+    global full_score, full_pass, full_ctrl, empty_ctrl, max_score, tim, full_ctrl_candidate, empty_ctrl_candidate
     decision_start = time.time() #start image capture timer
     
     #set the correct control image (ie. we are storing the respective controls as PIL images and we write to the "main" control named "control" based on which image we are capturing)
@@ -199,16 +198,15 @@ def process(name): #possible inputs "full" "empty" "calibrate_max"
         full_score = tot #save the score
         full_pass = good #save the pass/fail
         full_ctrl_candidate = candidate #update the current control candidate (basically copy the image so that it can write over the current control if desired
-        fail_index = 1
     elif name == "empty":
         pic_empty.image = result #send results to the picture widget on the main page
         empty_ctrl_candidate = candidate #update the current control candidate   
         #write the the data from empty and close to a line in the log (run at the end of ejector fire as that will ALWAYS happen after mold open)
         log.write(tim+","+str(full_score)+","+str(full_pass)+","+str(tot)+","+str(good)+"\n") #write time, score, and pass/fail to log
         log.flush()#save it
-        fail_index = 0
+        
     elif name == "calibrate_max": #if we are running a full test (compare full image to empty to calculate the highest possible score. anything above this score is a mistimed image
-        max_score = int(0.6*tot) #update the internal max score (multiply by 0.9 so that values that are close can still trigger as misfire)
+        max_score = int(0.75*tot) #update the internal max score (multiply by 0.9 so that values that are close can still trigger as misfire)
         print("Max Score: "+str(max_score)) #print the highest possible score
         return #leave the function
     elif name == "empty misfire": #if the current capture is an empty misfire
@@ -228,7 +226,6 @@ def process(name): #possible inputs "full" "empty" "calibrate_max"
         print("output folder full, not saving image")
         folder_has_space = False            
     if good == True: #if the image passed
-        fail_count[fail_index] = 0 #reset the fail counter
         set_control(name) #reset the control
         app.bg = "light grey" #reset the background color
     else: #if the image failed
@@ -236,11 +233,6 @@ def process(name): #possible inputs "full" "empty" "calibrate_max"
             control.save(fail_folder+tim+"_"+name+"_ctrl.jpg") #save the control to the fail folder
             candidate.save(fail_folder+tim+"_"+name+"_raw.jpg") #save the raw image to the fail folder
             result.save(fail_folder+tim+"_"+name+".jpg") #save a copy of the results to the fail folder
-        fail_count[fail_index] = fail_count[fail_index]+1 #iterate the fail count for the current index
-        if fail_count[fail_index] > fail_reset: #if the fail count of the current index exceeds the limit
-            set_control(name) #reset the control images
-            log.write(tim+",Reset,Reset,Reset,Reset\n") #describe the event in the log
-            print("Found "+str(fail_reset)+" consecutive fails, assuming reset error, resetting control")
             
 #Password Functions---------------------------------------------------------------------------------------------------------------------------------------
 def request_settings(): #define code to request the openeing of the settings page
@@ -284,7 +276,7 @@ def simulate_alarm(): #define the code to simulate the alarm
     if alarm_access:alarm_pin.blink(on_time=0.1,n=1) #if alarm access is enabled make the alarm line "blink" for 0.1s once
 
 def close_settings(): #define code to close the settings window
-    sett_close = set_win.yesno("Restart?", "Restart program to send camera new settings? (Required for camera setting changes)") #create popup to ask if user wants to restart to push new settings to camera
+    sett_close = set_win.yesno("Restart?", "Restart program to send camera new settings? (Not rquired if changing rotation, sensitivity, or threshold)") #create popup to ask if user wants to restart to push new settings to camera
     keyboard("close") #close the keyboard
     if sett_close == True: #if the answer is yes
         restart() #restart the program (maybe just migrate this out of a function if this is the only refrence)
@@ -410,7 +402,7 @@ def change_open_delay(): #define code to change the sensitivity
         open_delay = new_open_delay #update the current value
         config_write(9,open_delay) #save to config file
         open_delay_curr_text.value = "Current Mold Open Capture Delay: "+str(open_delay) #update window text
-        open_delay_input.value = "" #clear the textbox
+        opend_delay_input.value = "" #clear the textbox
 
 def change_eject_delay(): #define code to change the sensitivity
     try: #attempt the following
@@ -418,7 +410,7 @@ def change_eject_delay(): #define code to change the sensitivity
     except: #if it fails (input is non numeric)
         set_win.error("Warning", "invalid input, not saving")
     else: #otherwise (input IS numeric)
-        print("Setting eject fire capture delay to:"+str(new_eject_delay)) #print to terminal
+        print("Setting eject fire capture delay to:"+str(new_sens)) #print to terminal
         eject_delay = new_eject_delay #update the current value
         config_write(10,eject_delay) #save to config file
         eject_delay_curr_text.value = "Current Contrast Sensitivity: "+str(eject_delay) #update window text
@@ -782,9 +774,8 @@ camera.start_recording(stream, format='h264') #start recording to the stream
 app = App(title='Main', layout='auto', width = display_width, height = display_height) #create the main application window in a fullsize window
 app.when_closed=shutdown #when the close button is pressed on the main window, stop the program
 mask_win = Window(app, title='Masking Tool', layout='auto', width = 950, height = 800, visible=False, bg="gray75") #create the masking tool window, make the background slight;y darker than main for contrast
-set_win = Window(app, title="Settings",layout="grid", width = 1920, height = 700, visible=False) #create the settings window
-set_win.tk.geometry('%dx%d+%d+%d' % (1920, 700, 0, ((display_height/2))-50)) #center the window
-settings_help_win = Window(set_win, title="Help", width=1600, height=800, visible=False) #create a settings help window
+set_win = Window(app, title="Settings",layout="grid", width = 1800, height = 600, visible=False) #create the settings window
+settings_help_win = Window(set_win, title="Help", width=1600, height=600, visible=False) #create a settings help window
 
 #control preview------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 full_preview = Window(app, title="full preview", width=800, height=600, visible=False) #create a "full" preview window
@@ -795,9 +786,25 @@ empty_pic = Picture(empty_preview, image=comp_path+"empty_ctrl.jpg") #add the cu
 PushButton(empty_preview, command=empty_preview.hide, text="Close",width=10, height=3) #add close button
 
 #setup main window-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-PushButton(app, command=request_settings, text="Settings", align='bottom', height=3, width=20) #define settings button widget
-pic_full = Picture(app, image=menu_image, align='top') #create picture widget to show the mold open image
-pic_empty = Picture(app, image=menu_image, align='bottom') #create picture widget to show the ejector fire image
+row_1 = Box(app, width=res[0]*2, height=res[1], align='top') #create a container for the images. call it row_0
+pic_full = Picture(row_1, image=menu_image, align='left') #create picture widget to show the mold open image
+pic_empty = Picture(row_1, image=menu_image, align='right') #create picture widget to show the ejector fire image
+row_2 = Box(app, width=300, height=75, align='bottom') #create a container for the reset and simulate alarm buttons. call it row_2
+PushButton(row_2, command=reset_alarm, text="Reset", align='left', height="fill", width="fill") #define reset button widget
+PushButton(row_2, command=simulate_alarm, text="Simulate Alarm", align='right', height="fill", width="fill") #define settings button widget
+row_3 = Box(app, width=400, height=75, align='bottom') #create a container for the control set buttons, call it row_3
+PushButton(row_3, command=lambda: set_control("full"), text="Reset Full Control", align='left', height="fill", width="fill")
+PushButton(row_3, command=lambda: set_control("empty"), text="Reset Empty Control", align='right', height="fill", width="fill")
+row_4 = Box(app, width=420, height=75, align='bottom') #create a container for the control preview buttons, call it row_4
+PushButton(row_4, command=empty_ctrl_focus, text="Preview Empty Control", align='right', height="fill", width="fill")
+PushButton(row_4, command=full_ctrl_focus, text="Preview Full Control", align='left', height="fill", width="fill")
+row_5 = Box(app, width=340, height=75, align='bottom') #create a container for the settings and alarm lockout buttons, call it row_5
+PushButton(row_5, command=request_settings, text="Settings", align='left', height="fill", width="fill") #define settings button widget
+alarm_lock = PushButton(row_5, command=toggle_alarm_access, text="Alarm access is "+str(alarm_access), align='right', height="fill", width="fill") #define settings button widget
+row_6 = Box(app, width=330, height=75, align='bottom') #create a container for the signal simulation buttons. call it row_6
+PushButton(row_6, command=lambda: process("empty"), text="Simulate Eject", align='right', height="fill", width="fill") #define settings button widget
+PushButton(row_6, command=lambda: process("full"), text="Simulate Open", align='left', height="fill", width="fill") #define settings button widget
+PushButton(app, command=launch_mask_tool, text="Masking Tool", align='bottom', height="3", width="20") #define settings button widget
 pic_full.repeat(1, check_signals) #attach repeat widget to the picture widget to run "check_signals" every 1ms
 
 #Setup Masking Tool Window-----------------------------------------------------------------------------------------------------------------------------------------------------
@@ -882,7 +889,7 @@ resh_input = TextBox(set_win, grid=[3,5]) #create textbox widget for height inpu
 resw_input.when_key_pressed = res_enter #if a key is pressed in the text box run the enter check
 resh_input.when_key_pressed = res_enter #if a key is pressed in the text box run the enter check
 PushButton(set_win, command=change_res, text="set", grid=[4,5], height=2, width=10) #create button widget to save resolution
-Text(set_win, text="Suggested: 852 480", grid=[5,5]) #create text widget to display recommended/max values
+Text(set_win, text="Suggested: 852 480 Max: 3280 2464", grid=[5,5]) #create text widget to display recommended/max values
 
 #create secton for image threshold (setup identical to ISO, see that section for line by line)
 thresh_curr_text = Text(set_win, text="Current Decision Threshold: "+str(thresh), grid=[1,6])
@@ -927,20 +934,11 @@ PushButton(set_win, command=change_name, text="set", grid=[8,5], height=2, width
 Text(set_win, text="Suggestion: Machine Number", grid=[9,5])
 
 #add settings buttons
-PushButton(set_win, command=settings_help_win.show, text="Help", grid=[3,11], height=3, width=15) #Add button to settings window for help window
-PushButton(set_win, command=close_settings, text="Close", grid=[4,11], height=3, width=15) #create button widget to be able to close settings page (just executes hide command)
-PushButton(set_win, command=lambda: process("calibrate_max"), text="Refresh Max Score", grid=[5,11], height=3, width=15) #Depreceated button
-PushButton(set_win, command=pass_reset_win.show, text="Reset Password", grid=[6,11], height=3, width=15) #create button widget to reset the password
-PushButton(set_win, command=transmit, text="Manually Transmit", grid=[5,12], height=3, width=15) #create button widget to reset the password
-PushButton(set_win, command=simulate_alarm, text="Simulate Alarm", grid=[3,12], height=3, width=15) #define settings button widget
-PushButton(set_win, command=lambda: set_control("full"), text="Reset Full Control", grid=[7,11], height=3, width=15) #define full control override button
-PushButton(set_win, command=lambda: set_control("empty"), text="Reset Empty Control", grid=[8,11], height=3, width=15) #define empty control override button
-PushButton(set_win, command=empty_ctrl_focus, text="Preview Empty Control", align='right', grid=[7,12], height=3, width=20) #define empty control preview button
-PushButton(set_win, command=full_ctrl_focus, text="Preview Full Control", align='left', grid=[8,12], height=3, width=20) #define full control preview button
-alarm_lock = PushButton(set_win, command=toggle_alarm_access, text="Alarm access is "+str(alarm_access), grid=[6,12], height=3, width=20) #define settings button widget
-PushButton(set_win, command=lambda: process("empty"), text="Simulate Eject", grid=[8,6], height=3, width=15) #define simulate eject button widget
-PushButton(set_win, command=lambda: process("full"), text="Simulate Open", grid=[7,6], height=3, width=15) #define simulate opeb button widget
-PushButton(set_win, command=launch_mask_tool, text="Masking Tool", grid=[4,12], height=3, width=15) #define the asking tool button widget
+PushButton(set_win, command=settings_help_win.show, text="Help", grid=[3,11], height=2, width=15) #Add button to settings window for help window
+PushButton(set_win, command=close_settings, text="Close", grid=[4,11], height=2, width=15) #create button widget to be able to close settings page (just executes hide command)
+PushButton(set_win, command=lambda: process("calibrate_max"), text="Refresh Max Score", grid=[5,11], height=2, width=15) #Depreceated button
+PushButton(set_win, command=pass_reset_win.show, text="Reset Password", grid=[6,11], height=2, width=15) #create button widget to reset the password
+PushButton(set_win, command=transmit, text="Manually Transmit", grid=[7,11], height=2, width=15) #create button widget to reset the password
 
 #Settings help window setup-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 Text(settings_help_win, text="""ISO: Determine sensitivity to light, lower=darker and higher=brighter.\n
@@ -953,16 +951,10 @@ Decision Threshold: Defines the number of pixels that are different between the 
 Contrast sensitivity: How sensitive program is to flag a pixel as different from the control. Higher means more likely.\n
 Capture delays: How long to wait before capturing a picture of the mold in seconds.\n
 Server IP: IP of the raspberry pi the data will be transmitted to via manual transmit.\n
-Machine Name: Name of the client. This is the name at the beginning of the archive folder name.\n
-Refresh Max Score: Runs processing of the controls to obtain the maximum possible score. This allows the program to automatically ignore mistimed or blurry images.\n
-Simulate Buttons: Command the system to emulate the mold status or send the alarm signal (this is used to test alarm wiring and camera setup)\n
-Control Resets: Allows you to manually override the controls, this must be run if the machine configuration changes as the system will look for the old layout unless rebooted\n
-Preview Controls: Allows you to view the currently set control for each status.\n
-Masking Tool: Allows you to designate the regions for the system to check.\n
 Manually Transmit: Manually run the scheduled file upload from the client(this machine) to the server.\n
-Alarm Access: Allows you to lock out the system from alarm access if it is creating too many false positives.""") #create a popup with helpful text
+Refresh Max Score: Runs processing of the controls to obtain the maximum possible score. This allows the program to automatically ignore mistimed or blurry images.""") #create a popup with helpful text
 settings_help_close = PushButton(settings_help_win, command=settings_help_win.hide, text="Close",width=10,height=3) #add close button
-settings_help_win.tk.geometry('%dx%d+%d+%d' % (1600, 700, display_width/2-(1600/2), 100)) #center the window
+settings_help_win.tk.geometry('%dx%d+%d+%d' % (1600, 600, display_width/2-(1600/2), display_height/2)) #center the window
 
 #Setup Finish------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 setup_end = time.time() #stop the timer
@@ -970,4 +962,3 @@ setup_time = setup_end - setup_start #calculate elapsed time since setup start
 print('Setup time: {} seconds'.format(setup_time)) #display the setup making time
  
 app.display() #push everything to the gui
-
