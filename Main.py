@@ -527,7 +527,7 @@ def pass_enter(event):
 #Utility Functions------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 def update_startup_log(): #define code to write to the startup log
     startup_log = open(startup_log_path, "a") #open startup log csv file in "append mode"
-    startup_log.write(time.asctime()+","+current_password+","+str(iso)+","+str(ss)+","+cm+","+str(res[0])+","+str(res[1])+","+str(rot)+","+str(thresh)+","+str(sens)+","+str(open_delay)+","+str(eject_delay)+","+server_ip+","+str(max_score)+","+name+"\n") #write the current time and settings to the startup log
+    startup_log.write(time.asctime()+","+current_password+","+str(iso)+","+str(ss)+","+cm+","+str(res[0])+","+str(res[1])+","+str(rot)+","+str(thresh)+","+str(sens)+","+str(open_delay)+","+str(eject_delay)+","+server_ip+","+str(max_score)+","+name+","+str(alarm_access)+"\n") #write the current time and settings to the startup log
     startup_log.close() #close the startup log (auto saves new data)
     
 def check_folder_size(path): #define code to get the size of a folder
