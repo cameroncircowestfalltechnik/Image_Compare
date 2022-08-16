@@ -12,4 +12,4 @@ cp /usr/share/matchbox-keyboard/keyboard-lq1.xml /home/pi/.matchbox/keyboard.xml
 chown pi:pi /home/pi/.matchbox/keyboard.xml
 mkdir /home/pi/.config/autostart
 sudo mv /home/pi/Desktop/start.desktop /home/pi/.config/autostart
-
+mkdir /home/pi/Desktop/recieve
