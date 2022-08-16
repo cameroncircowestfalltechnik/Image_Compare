@@ -11,3 +11,4 @@ sports
 0.2
 192.168.0.159
 machine name
+False
