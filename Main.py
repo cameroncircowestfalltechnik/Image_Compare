@@ -48,7 +48,6 @@ display_height = 1080 #define display height
 size_max = 5000000000 #set max output folder size (currently 5 GB)
 size_status = 1 #create a interger to count how many times the size has been checked and maintain its status
 size_check_reset = 10 #define how many times to request a folder check before actually running
-alarm_access = False #intialize Alarm lockout defaults to no access
 fail_count = [0]*2 #counts how many consecutive fails have occured
 fail_reset = 10 #specifies how many consectutive fails force a reset
 did = [] #create empty list to store mask drawing ids (stores the ids of all drawings on the image)
@@ -92,6 +91,11 @@ open_delay = float(lines[9].strip()) #read line 9 as open capture delay
 eject_delay = float(lines[10].strip()) #read line 10 as the eject capture delay
 server_ip = lines[11].strip() #read line 11 as the server IP
 name = lines[12].strip() #read line 12 as the machine name
+alarm_access = lines[13].strip() #read line 13 as the alarm access status
+if alarm_access == "True": #if it read the text "True"
+    alarm_access = True #enable alarm access
+else: #otherwise
+    alarm_access = False #disable alarm access
 
 #The Camera Zone------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 #capture and process the image
@@ -599,6 +603,7 @@ def toggle_alarm_access(): #define code to toggle alarm lockout
         alarm_access = True #enable it
         print("Enabling Alarm") #print the change
     alarm_lock.text = "Alarm access is "+str(alarm_access) #update the button text with the new state
+    config_write(13,alarm_access) #save to config file
 
 def restart(): #define code to restart the program
     keyboard("close") #close the keyboard
@@ -854,27 +859,27 @@ iso_curr_text = Text(set_win, text="Current ISO: "+str(iso), grid=[1,1]) #define
 iso_input = TextBox(set_win, grid=[2,1]) #create text box widget to allow input of new value
 iso_input.when_key_pressed = iso_enter #if a key is pressed in the text box run the enter check
 PushButton(set_win, command=change_iso, text="set", grid=[4,1], height=2, width=10) #create button widget to save new value
-Text(set_win, text="Suggested range: 100-800", grid=[5,1]) #create text widget to display recommended range
+Text(set_win, text="Range: 100-800", grid=[5,1]) #create text widget to display recommended range
 
 #create secton for shutter speed (setup identical to ISO, see that section for line by line)
 ss_curr_text = Text(set_win, text="Current Shutter Speed: "+str(ss), grid=[1,2]) 
 ss_input = TextBox(set_win, grid=[2,2])
 ss_input.when_key_pressed = ss_enter #if a key is pressed in the text box run the enter check
 PushButton(set_win, command=change_ss, text="set", grid=[4,2], height=2, width=10)
-Text(set_win, text="Suggested range: 0-60,000", grid=[5,2])
+Text(set_win, text="Range: 0-60,000", grid=[5,2])
 
 #create section for setting camera mode
 cm_curr_text = Text(set_win, text="Current Shutter Mode: "+cm, grid=[1,3]) #create text widget to display current mode
 cm_combo = Combo(set_win, options=['sports', 'auto','antishake'], grid=[2,3], height=2) #create drop down menu widget to select new camera mode TO DO: Add more options
 PushButton(set_win, command=change_cm, text="set", grid=[4,3], height=2, width=10) #create button widget to save mode
-Text(set_win, text="Suggested Mode: sports", grid=[5,3]) #create text widget to display recommended mode
+Text(set_win, text="Default: sports", grid=[5,3]) #create text widget to display recommended mode
 
 #create secton for image rotation (setup identical to ISO, see that section for line by line)
 rot_curr_text = Text(set_win, text="Current Image Rotation: "+str(rot), grid=[1,4])
 rot_input = TextBox(set_win, grid=[2,4])
 rot_input.when_key_pressed = rot_enter #if a key is pressed in the text box run the enter check
 PushButton(set_win, command=change_rot, text="set", grid=[4,4], height=2, width=10)
-Text(set_win, text="Suggested range: 0-180", grid=[5,4])
+Text(set_win, text="Range: 0-180", grid=[5,4])
 
 #create section for image resolution
 res_curr_text = Text(set_win, text="Current Camera Resolution: "+str(res[0])+" , "+str(res[1]), grid=[1,5]) #create text widget to display current value
@@ -883,35 +888,35 @@ resh_input = TextBox(set_win, grid=[3,5]) #create textbox widget for height inpu
 resw_input.when_key_pressed = res_enter #if a key is pressed in the text box run the enter check
 resh_input.when_key_pressed = res_enter #if a key is pressed in the text box run the enter check
 PushButton(set_win, command=change_res, text="set", grid=[4,5], height=2, width=10) #create button widget to save resolution
-Text(set_win, text="Suggested: 852 480", grid=[5,5]) #create text widget to display recommended/max values
+Text(set_win, text="Default: 852 480", grid=[5,5]) #create text widget to display recommended/max values
 
 #create secton for image threshold (setup identical to ISO, see that section for line by line)
 thresh_curr_text = Text(set_win, text="Current Decision Threshold: "+str(thresh), grid=[1,6])
 thresh_input = TextBox(set_win, grid=[2,6])
 thresh_input.when_key_pressed = thresh_enter #if a key is pressed in the text box run the enter check
 PushButton(set_win, command=change_thresh, text="set", grid=[4,6], height=2, width=10)
-Text(set_win, text="Suggested range: 8000-20,000", grid=[5,6])
+Text(set_win, text="Range: 8000-20,000", grid=[5,6])
 
 #create secton for sensitivity (setup identical to ISO, see that section for line by line)
 sens_curr_text = Text(set_win, text="Current Contrast Sensitivity: "+str(sens), grid=[6,1])
 sens_input = TextBox(set_win, grid=[7,1])
 sens_input.when_key_pressed = sens_enter #if a key is pressed in the text box run the enter check
 PushButton(set_win, command=change_sens, text="set", grid=[8,1], height=2, width=10)
-Text(set_win, text="Suggested range: 3-15 (Decimal)", grid=[9,1])
+Text(set_win, text="Range: 3-15 (Decimal)", grid=[9,1])
 
 #create secton for mold open capture delay (setup identical to ISO, see that section for line by line)
 open_delay_curr_text = Text(set_win, text="Current Mold Open Capture Delay: "+str(open_delay), grid=[6,2])
 open_delay_input = TextBox(set_win, grid=[7,2])
 open_delay_input.when_key_pressed = open_delay_enter #if a key is pressed in the text box run the enter check
 PushButton(set_win, command=change_sens, text="set", grid=[8,2], height=2, width=10)
-Text(set_win, text="Suggested range: 0.01-0.2 (Decimal)", grid=[9,2])
+Text(set_win, text="Range: 0.01-0.2 (Decimal)", grid=[9,2])
 
 #create secton for ejector fire capture delay (setup identical to ISO, see that section for line by line)
 eject_delay_curr_text = Text(set_win, text="Current Ejector Fire Capture Delay: "+str(eject_delay), grid=[6,3])
 eject_delay_input = TextBox(set_win, grid=[7,3])
 eject_delay_input.when_key_pressed = eject_delay_enter #if a key is pressed in the text box run the enter check
 PushButton(set_win, command=change_sens, text="set", grid=[8,3], height=2, width=10)
-Text(set_win, text="Suggested range: 0.1-0.3 (Decimal)", grid=[9,3])
+Text(set_win, text="Range: 0.1-0.3 (Decimal)", grid=[9,3])
 
 #create secton for server ip (setup identical to ISO, see that section for line by line)
 sip_curr_text = Text(set_win, text="Current Server IP: "+server_ip, grid=[6,4])
@@ -925,7 +930,7 @@ name_curr_text = Text(set_win, text="Current Machine Name: "+name, grid=[6,5])
 name_input = TextBox(set_win, grid=[7,5])
 name_input.when_key_pressed = name_enter #if a key is pressed in the text box run the enter check
 PushButton(set_win, command=change_name, text="set", grid=[8,5], height=2, width=10)
-Text(set_win, text="Suggestion: Machine Number", grid=[9,5])
+Text(set_win, text="Default: Machine Number", grid=[9,5])
 
 #add settings buttons
 PushButton(set_win, command=lambda: keyboard("toggle"), text="Toggle Keyboard", grid=[2,11], height=3, width=15) #Add button to toggle keyboard
@@ -972,4 +977,3 @@ setup_time = setup_end - setup_start #calculate elapsed time since setup start
 print('Setup time: {} seconds'.format(setup_time)) #display the setup making time
  
 app.display() #push everything to the gui
-
