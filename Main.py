@@ -783,7 +783,7 @@ app = App(title='Main', layout='auto', width = display_width, height = display_h
 app.when_closed=shutdown #when the close button is pressed on the main window, stop the program
 mask_win = Window(app, title='Masking Tool', layout='auto', width = 950, height = 800, visible=False, bg="gray75") #create the masking tool window, make the background slight;y darker than main for contrast
 set_win = Window(app, title="Settings",layout="grid", width = 1920, height = 700, visible=False) #create the settings window
-set_win.tk.geometry('%dx%d+%d+%d' % (1920, 700, 0, ((display_height/2))-50)) #center the window
+set_win.tk.geometry('%dx%d+%d+%d' % (1920, 700, 0, 0)) #center the window
 settings_help_win = Window(set_win, title="Help", width=1600, height=800, visible=False) #create a settings help window
 
 #control preview------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -927,6 +927,7 @@ PushButton(set_win, command=change_name, text="set", grid=[8,5], height=2, width
 Text(set_win, text="Suggestion: Machine Number", grid=[9,5])
 
 #add settings buttons
+PushButton(set_win, command=lambda: keyboard("toggle"), text="Toggle Keyboard", grid=[2,11], height=3, width=15) #Add button to toggle keyboard
 PushButton(set_win, command=settings_help_win.show, text="Help", grid=[3,11], height=3, width=15) #Add button to settings window for help window
 PushButton(set_win, command=close_settings, text="Close", grid=[4,11], height=3, width=15) #create button widget to be able to close settings page (just executes hide command)
 PushButton(set_win, command=lambda: process("calibrate_max"), text="Refresh Max Score", grid=[5,11], height=3, width=15) #Depreceated button
