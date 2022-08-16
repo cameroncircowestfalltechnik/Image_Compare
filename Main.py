@@ -257,13 +257,14 @@ def check_pass(): #define code to check of the password entered is correct
         pass_win.hide() #conceal the password window
         set_win.show() #make settings window visible
         pass_input.value = "" #clear the password entry box
+        keyboard("close") #close the keyboard
     else: #if the password is incorrect
         pass_win.error("Warning", "Wrong Password") #create a new popup stating wrong password
         pass_input.value = "" #clear the password entry box
         
 def cancel_pass(): #define what to do when password cancel button or window close is pressed
     pass_win.hide() #hide the password window
-    keyboard("close") #open the keyboard
+    keyboard("close") #close the keyboard
     pass_input.value = "" #clear the password entry box
     
 #Button Functions-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
