@@ -50,6 +50,11 @@ name = lines[12].strip() #read line 12 as the machine name
 #grab the client IP
 client_ip = subprocess.getoutput('hostname -I').rstrip() #grab the client ip and write it to client_ip
 
+#clear the send folder if it still exists
+try:
+    shutil.rmtree(base_folder+"/send", ignore_errors=True) #delete the send folder and all the files within
+except: #if it fails to delete
+    pass #do nothing
 #delete the old receipt
 try:
     os.remove(server_receipt_path) #attempt to delete the old receipt

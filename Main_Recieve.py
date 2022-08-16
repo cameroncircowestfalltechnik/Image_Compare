@@ -10,7 +10,8 @@ results_path = main_folder+"/send"
 client_receipt_path = main_folder+"/client_receipt.csv" #define the location of the client receipt
 server_receipt_path = main_folder+"/server_receipt.csv" #define the location of the server receipt
 image_path = results_path+"images/" #define the location of recieved images
-usb_path = "/media/pi/VISION_SYS1/Archive/" #define the location of the usb drive
+usb_path_A = "/media/pi/VISION_SYS/Archive/" #define the location of the usb drive
+usb_path_B = "/media/pi/VISION_SYS1/Archive/" #define an alternate possible location of the usb drive
 
 processing_path = "/home/pi/Desktop/processing/" #define location of processing folder
 archive_path = "/home/pi/Desktop/archive/" #defifne location of archive folder
@@ -38,6 +39,7 @@ def check_folder_size(path): #define code to get the size of a folder
             size = size+check_folder_size(entry.path) #get the size of the contents of the folder and add them to the total
     return size #return the folder size in bytes
 
+print("Startup: "+time.asctime()) #print startup time for log
 #check for files
 while True: #forever do the following
     file_exists = os.path.exists(client_receipt_path) #check that client receipt has been recieved
@@ -92,8 +94,12 @@ while True: #forever do the following
         num_day = time.strftime("%d",numday) #extract the day of the month as a number
         title = name+"_"+tim[:3]+"_"+tim[4:7]+"_"+num_day+"_at_"+tim[11:13]+"_"+tim[14:16]+"_"+tim[17:19] #Generate the folder title as the current time/date in form: day_month_num day_at_hout_minute_second
         print("Starting Saving")
-        if os.path.exists(usb_path): #check if the usb stick path is present (the usb stick is connected and readable
-            save_path = usb_path+day #set the output save path as the folder on the usb stick for the current day of the week
+        if os.path.exists(usb_path_A): #check if the usb stick path is present (the usb stick is connected and readable)
+            save_path = usb_path_A+day #set the output save path as the folder on the usb stick for the current day of the week
+            size_cap = external_size_cap #use the external size cap
+            print("Saving externally to "+save_path+"/"+title) #print the save location
+        elif os.path.exists(usb_path_B): #check if the usb stick path is present at the alternate location(the usb stick is connected and readable)
+            save_path = usb_path_B+day #set the output save path as the folder on the usb stick for the current day of the week
             size_cap = external_size_cap #use the external size cap
             print("Saving externally to "+save_path+"/"+title) #print the save location
         else: #otherwise (if the usb stick is not connected)
