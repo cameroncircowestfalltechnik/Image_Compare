@@ -834,7 +834,7 @@ pass_button_box = Box(pass_win, width=200, height=75, align='bottom') #create a 
 PushButton(pass_button_box, command=cancel_pass, text="Cancel", align='right',height="fill",width=10)
 PushButton(pass_button_box, command=check_pass, text="Ok", align='left',height="fill", width=10)
 pass_input.when_key_pressed = pass_enter #if a key is pressed in the text box run the enter check
-pass_win.tk.geometry('%dx%d+%d+%d' % (300, 100, display_width/2-(300/2), display_height/2)) #respecify settings window size (redundant but required) then position. The window is moved here to be out of the way of the keyboard)
+pass_win.tk.geometry('%dx%d+%d+%d' % (300, 100, display_width/2-(300/2), (display_height/2)-100)) #respecify settings window size (redundant but required) then position. The window is moved here to be out of the way of the keyboard)
 
 #Password Reset Window Setup------------------------------------------------------------------------------------------------------------------------------------------------------------
 pass_reset_win = Window(app, title="Password Reset",layout="grid", width = 300, height = 200, visible=False) #create the password reset window
