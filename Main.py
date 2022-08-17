@@ -295,6 +295,11 @@ def close_settings(): #define code to close the settings window
         restart() #restart the program (maybe just migrate this out of a function if this is the only refrence)
     else: #otherwise (if the window is closed or no is selected)
         set_win.hide() #conceal the settings window
+        
+def camera_preview(): #define code to preview camera view
+    camera.start_preview() #start the preview
+    time.sleep(10) #wait 10 seconds
+    camera.stop_preview() #close the preview
     
 #Value Change Functions-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 def change_iso(): #define code to change the iso
@@ -934,6 +939,7 @@ Text(set_win, text="Default: Machine Number", grid=[9,5])
 
 #add settings buttons
 PushButton(set_win, command=lambda: keyboard("toggle"), text="Toggle Keyboard", grid=[2,11], height=3, width=15) #Add button to toggle keyboard
+PushButton(set_win, command=camera_preview, text="Preview Camera", grid=[2,12], height=3, width=15) #Add button to show camera preview
 PushButton(set_win, command=settings_help_win.show, text="Help", grid=[3,11], height=3, width=15) #Add button to settings window for help window
 PushButton(set_win, command=close_settings, text="Close", grid=[4,11], height=3, width=15) #create button widget to be able to close settings page (just executes hide command)
 PushButton(set_win, command=lambda: process("calibrate_max"), text="Refresh Max Score", grid=[5,11], height=3, width=15) #Depreceated button
@@ -961,6 +967,8 @@ Contrast sensitivity: How sensitive program is to flag a pixel as different from
 Capture delays: How long to wait before capturing a picture of the mold in seconds.\n
 Server IP: IP of the raspberry pi the data will be transmitted to via manual transmit.\n
 Machine Name: Name of the client. This is the name at the beginning of the archive folder name.\n
+Toggle Keyboard: Like the name says it toggles the popup keyboard.\n
+Preview Camera: Shows the live feed of the camera for 10 seconds to assist with camera positioning.\n
 Refresh Max Score: Runs processing of the controls to obtain the maximum possible score. This allows the program to automatically ignore mistimed or blurry images.\n
 Simulate Buttons: Command the system to emulate the mold status or send the alarm signal (this is used to test alarm wiring and camera setup)\n
 Control Resets: Allows you to manually override the controls, this must be run if the machine configuration changes as the system will look for the old layout unless rebooted\n
