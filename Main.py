@@ -623,7 +623,7 @@ def shutdown(): #define code to shutdown the program
     quit() #stop the program
     
 def transmit(): #define code to transmit files to server This could probably jsut be done by a really long guizero button instead of as a function
-    subprocess.Popen(["python", "Main_Transmit.py", "-pop"]) #run the transmit script with popups enabled
+    subprocess.Popen(["python", "/home/pi/Desktop/Main_Transmit.py", "-pop"]) #run the transmit script with popups enabled
 
 def keyboard(arg): #define code to open/close/toggle the keyboard
     #recieved argument:"open"
