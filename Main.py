@@ -793,8 +793,8 @@ camera.start_recording(stream, format='h264') #start recording to the stream
 app = App(title='Main', layout='auto', width = display_width, height = display_height) #create the main application window in a fullsize window
 app.when_closed=shutdown #when the close button is pressed on the main window, stop the program
 mask_win = Window(app, title='Masking Tool', layout='auto', width = display_width, height = display_height, visible=False, bg="gray75") #create the masking tool window, make the background slight;y darker than main for contrast
-set_win = Window(app, title="Settings",layout="grid", width = 1920, height = 700, visible=False) #create the settings window
-set_win.tk.geometry('%dx%d+%d+%d' % (1920, 700, 0, 0)) #center the window
+set_win = Window(app, title="Settings",layout="grid", width = 1920, height = 600, visible=False) #create the settings window
+set_win.tk.geometry('%dx%d+%d+%d' % (1920, 600, 0, display_height-600)) #center the window
 settings_help_win = Window(set_win, title="Help", width=1600, height=800, visible=False) #create a settings help window
 
 #control preview------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -844,7 +844,7 @@ pass_button_box = Box(pass_win, width=200, height=75, align='bottom') #create a 
 PushButton(pass_button_box, command=cancel_pass, text="Cancel", align='right',height="fill",width=10)
 PushButton(pass_button_box, command=check_pass, text="Ok", align='left',height="fill", width=10)
 pass_input.when_key_pressed = pass_enter #if a key is pressed in the text box run the enter check
-pass_win.tk.geometry('%dx%d+%d+%d' % (300, 100, display_width/2-(300/2), (display_height/2)-100)) #respecify settings window size (redundant but required) then position. The window is moved here to be out of the way of the keyboard)
+pass_win.tk.geometry('%dx%d+%d+%d' % (300, 100, display_width/2-(300/2), (display_height/2)-300)) #respecify settings window size (redundant but required) then position. The window is moved here to be out of the way of the keyboard)
 
 #Password Reset Window Setup------------------------------------------------------------------------------------------------------------------------------------------------------------
 pass_reset_win = Window(app, title="Password Reset",layout="grid", width = 300, height = 200, visible=False) #create the password reset window
