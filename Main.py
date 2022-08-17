@@ -42,7 +42,7 @@ is_first_full, is_first_empty = True,True #intialize the first fire status as tr
 good = True #create variable to hold pass/fail status
 full_qty, empty_qty = 0,0 #intialize image throwout counters
 throwout_qty = 3 #define how many images to throwout upon startup
-res_max = (3280, 2464) #define the max camera resolution
+res_max = (1200, 750) #define the max camera resolution
 display_width = 1920 #define display width
 display_height = 1080 #define display height
 size_max = 5000000000 #set max output folder size (currently 5 GB)
@@ -787,7 +787,7 @@ camera.start_recording(stream, format='h264') #start recording to the stream
 #app = App(title='main', layout='auto', width = 1700, height = 800) #create the main application window as a small window
 app = App(title='Main', layout='auto', width = display_width, height = display_height) #create the main application window in a fullsize window
 app.when_closed=shutdown #when the close button is pressed on the main window, stop the program
-mask_win = Window(app, title='Masking Tool', layout='auto', width = 950, height = 800, visible=False, bg="gray75") #create the masking tool window, make the background slight;y darker than main for contrast
+mask_win = Window(app, title='Masking Tool', layout='auto', width = display_width, height = display_height, visible=False, bg="gray75") #create the masking tool window, make the background slight;y darker than main for contrast
 set_win = Window(app, title="Settings",layout="grid", width = 1920, height = 700, visible=False) #create the settings window
 set_win.tk.geometry('%dx%d+%d+%d' % (1920, 700, 0, 0)) #center the window
 settings_help_win = Window(set_win, title="Help", width=1600, height=800, visible=False) #create a settings help window
