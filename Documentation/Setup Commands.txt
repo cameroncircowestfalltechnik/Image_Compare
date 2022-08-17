@@ -1,0 +1,52 @@
+CLIENT:
+
+sudo raspi-config
+
+sudo chmod +x /home/pi/Desktop/client_setup.sh
+/home/pi/Desktop/client_setup.sh
+
+sudo pip install pillow
+sudo pip3 install guizero
+sudo apt-get install python-picamera python3-picamera
+sudo apt-get install python3-numpy
+sudo apt install python3-gpiozero
+pip install argparse
+sudo apt-get install python3-pil.imagetk
+pip install subprocess.run
+sudo apt-get install matchbox-keyboard -y
+sudo apt-get install libmatchbox1 -y
+sudo mv /home/pi/Desktop/toggle-matchbox-keyboard.sh /usr/bin
+sudo chmod +x /usr/bin/toggle-matchbox-keyboard.sh
+mkdir ~/.matchbox
+sudo cp /usr/share/matchbox-keyboard/keyboard-lq1.xml ~/.matchbox/keyboard.xml
+sudo chown pi:pi ~/.matchbox/keyboard.xml
+toggle-matchbox-keyboard.sh
+
+mkdir /home/pi/.config/autostart
+mv /home/pi/Desktop/start.desktop /home/pi/.config/autostart
+mkdir /home/pi/Desktop/receive
+
+sudo crontab -e
+00 00 * * * /sbin/shutdown -r now
+05 00 * * * /usr/bin/python3 /home/pi/Desktop/Main_Transmit.py >> /home/pi/Desktop/Transmit.log 2>&1
+
+ssh-keygen
+ssh-copy-id pi@IP
+sudo chmod 777 /root
+sudo cp -r /home/pi/.ssh /root
+sudo chmod 777 /root/.ssh
+
+sudo shutdown now
+
+SERVER:
+pip install subprocess.run
+
+sudo crontab -e
+00 00 * * * /sbin/shutdown -r now
+@reboot /usr/bin/python3 /home/pi/Desktop/Main_Recieve.py >> /home/pi/Desktop/log.log 2>&1
+
+ssh-keygen
+ssh-copy-id pi@IP
+sudo chmod 777 /root
+sudo cp -r /home/pi/.ssh /root
+sudo chmod 777 /root/.ssh
